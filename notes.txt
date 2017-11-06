@@ -1,0 +1,22 @@
+Relevant resources: 
+
+- /Users/canagnos/Dropbox/dsio-demos/telemetryTest
+- /Users/canagnos/Dropbox/dsio-demos/ford_splunk
+- /Users/canagnos/libraries/dsio-sandbox/elastic_interface/VA/dashboardgenerator
+- /Users/canagnos/libraries/dsio-sandbox/elastic_interface/VA/kibanademos
+especially generic_anomaly_detection_v0.py
+- /Users/canagnos/libraries/dsio-sandbox/elastic_interface/Rcode
+
+
+CSV 	> Python Pandas 	> Elasticsearch (restream/historical) 	> Kibana
+							> Kibana generate dashboard
+
+INGESTION
++ v0.1 Offline consumption of a single CSV
++ v0.2 Listening to a folder
++ v0.3 Connecting to a Kafka queue
+
+ENGINE
++ v0.1 Python (Conda 2.7)
++ v0.2 R
+
