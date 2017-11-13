@@ -12,9 +12,10 @@ import json
 
 def batchRedater(X, tName, hz = 10):
     # send 10 datapoints a second
-    nowTime = np.round(time.time())
+    nowTime = np.int(np.round(time.time()))
     X[tName]= (nowTime*1000 + X.index._data*hz)
     return X
+
 
 def df2es(Y, index_name, es = None, bodyNow = None, recreate = True, chunk_size = 100, raw=False, doc_ids = None):
     
@@ -36,11 +37,11 @@ def df2es(Y, index_name, es = None, bodyNow = None, recreate = True, chunk_size 
 
     # Formatting the batch to upload as a tuple of dictionnaries
     list_tmp = tuple(Y.fillna(0).T.to_dict().values())
-list_tmp
-    #Exporting to ES
+    # Exporting to ES
     out = helpers.bulk(es, list_tmp)
 
-X = features
+
+# X = features
 def DSIO2ES_batchRestreamer(X, tName, es = None, index_name = 'tele_full', reDate = True, everyX = 10, sleep = True):
     if reDate:
         X = batchRedater(X, tName)
@@ -61,8 +62,8 @@ def DSIO2ES_batchRestreamer(X, tName, es = None, index_name = 'tele_full', reDat
 
         ind = np.logical_and(X[tName] <= endTime, X[tName] > startTime)
         print('Writing {} rows dated {} to {}'.format(np.sum(ind), 
-                                                        datetime.datetime.fromtimestamp(startTime/1000.),
-                                                            datetime.datetime.fromtimestamp(endTime/1000.)))
+              datetime.datetime.fromtimestamp(startTime/1000.),
+              datetime.datetime.fromtimestamp(endTime/1000.)))
 
         bodyNow = {"time" : {"type": "date"}}
         df2es(
