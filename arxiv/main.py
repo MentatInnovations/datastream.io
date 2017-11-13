@@ -1,14 +1,15 @@
+import sys
+import json
+import datetime
+
 import pandas as pd
 import numpy as np
-import time as time
-from collections import Counter
-import datetime
-import tabulate
+
 # from pyelasticsearch import *
 import elasticsearch as ES
-import json
-import sys
-from utils import *
+
+from utils_esk import DSIO2ES_batchRestreamer
+
 
 # Creating score function:
 def batchScore(X, q = 0.99):
@@ -19,13 +20,15 @@ def batchScore(X, q = 0.99):
 
 # Config:
 print('Creating configuration file ... ')
-fname = '~/Dropbox/dsio-demos/ford_splunk/cardata.csv'
+fname = '../static/data/cardata_sample.csv'
 sensorNames = set({'accelerator_pedal_position',
   'torque_at_transmission',
   'steering_wheel_angle',
   'brake_pedal_status',
   'vehicle_speed',
   'transmission_gear_position'})
+
+
 tName = 'time'
 index_name = 'tele-check'
 _type = 'car'
@@ -78,5 +81,4 @@ Dpp['_type'] = _type
 
 # init ElasticSearch
 es = ES.Elasticsearch('http://localhost:9200/')
-
 DSIO2ES_batchRestreamer(X = Dpp, tName = tName, es = es, index_name = index_name, reDate = True, sleep = True)
