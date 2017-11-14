@@ -1,24 +1,30 @@
+import os
+import math
 import functools
-import pandas as pd
-import numpy as np
 import logging
 import sys
 import csv
 import fcntl
-import pika
+import pickle
 import json
 import time
 import pytz
 from time import mktime as mktime
+from datetime import datetime, timedelta
 
-from datetime import timedelta
+import pandas as pd
+
+import numpy as np
+
+import pika
+
 from elasticsearch import Elasticsearch
-from datetime import datetime
+from elasticsearch import helpers
+
 from boto.s3.connection import S3Connection
-import math, os
+
 from filechunkio import FileChunkIO
 
-import pickle
 
 LOGGER = logging.getLogger(__name__)
 # Quick and dirty solution of producing re-streamed files (played again using
@@ -103,8 +109,6 @@ gconf = {
     'AWS_S3_BUCKET': 'dsio-datasets'
 }
 
-from elasticsearch import helpers
-
 # keep metadata for the last file and chunk processed
 # last_chunk_of_last_file_processed = None
 # last_file_path_read = None
@@ -168,6 +172,8 @@ def write_to_rabbit(writable_list):
         rabbitmq_channel.basic_publish(exchange=exchange,
                                        routing_key=routing_key,
                                        body=json.dumps(element))
+
+
 @timing
 def write_to_rabbit_csv(final_data_frame):
     LOGGER.info('Writing to rabbitmq csv')
@@ -185,6 +191,8 @@ def write_to_rabbit_csv(final_data_frame):
         rabbitmq_channel.basic_publish(exchange=exchange,
                                        routing_key=routing_key,
                                        body=csv_string)
+
+
 @timing
 def read_template_file_in_chunks(gconf, config_dict):
     LOGGER.info('Reading file %s', gconf['dataTemplateFile'])
@@ -520,45 +528,46 @@ def read_or_init_restreamed_metadata(file_path):
     if gconf['restreamFromLastSuccessfullChunkOnly']:
         if os.path.isfile(file_path):
             with open(file_path, 'rb') as f:
-                dict = pickle.loads(f.read())
+                result = pickle.loads(f.read())
 
-                if 'last_chunk_of_last_file_processed' in dict:
-                    if dict['last_chunk_of_last_file_processed'] is None:
-                        dict['last_chunk_of_last_file_processed'] = 0
+                if 'last_chunk_of_last_file_processed' in result:
+                    if result['last_chunk_of_last_file_processed'] is None:
+                        result['last_chunk_of_last_file_processed'] = 0
                 else:
-                    dict['last_chunk_of_last_file_processed'] = 0
+                    result['last_chunk_of_last_file_processed'] = 0
 
-                if 'last_file_path_read' in dict:
-                    if dict['last_file_path_read'] is None:
-                        dict['last_file_path_read'] = gconf['dataTemplateFile']
+                if 'last_file_path_read' in result:
+                    if result['last_file_path_read'] is None:
+                        result['last_file_path_read'] = gconf['dataTemplateFile']
                 else:
-                    dict['last_file_path_read'] = gconf['dataTemplateFile']
+                    result['last_file_path_read'] = gconf['dataTemplateFile']
 
-                if 'last_size_of_last_chunk_file_processed' in dict:
-                    if dict['last_size_of_last_chunk_file_processed'] is None:
-                        dict['last_size_of_last_chunk_file_processed'] = gconf[
+                if 'last_size_of_last_chunk_file_processed' in result:
+                    if result['last_size_of_last_chunk_file_processed'] is None:
+                        result['last_size_of_last_chunk_file_processed'] = gconf[
                             'chunkSize']
                 else:
-                    dict['chunkSize'] = gconf['chunkSize']
+                    result['chunkSize'] = gconf['chunkSize']
 
-                return dict
+                return result
 
         else:
-            dict = {
+            result = {
                 'last_chunk_of_last_file_processed': 0,
                 'last_file_path_read': gconf['dataTemplateFile'],
                 'last_size_of_last_chunk_file_processed': gconf['chunkSize']
             }
             with open(file_path, 'wb') as handle:
-                pickle.dump(dict, handle)
-            return dict
+                pickle.dump(result, handle)
+            return result
     else :
-        dict = {
+        result = {
             'last_chunk_of_last_file_processed': 0,
             'last_file_path_read': gconf['dataTemplateFile'],
             'last_size_of_last_chunk_file_processed': gconf['chunkSize']
         }
-        return dict
+        return result
+
 
 def main():
     if file_is_locked(file_path):

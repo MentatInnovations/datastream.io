@@ -1,6 +1,3 @@
-import json
-import utils
-
 '''
 README:
 
@@ -31,18 +28,39 @@ etc
 
 where i is the index of an element in the list.
 '''
+
+import json
+
+from utils_dashboard import generate_dashboard, sizes_to_rowcols
+from utils_dashboard import regvisu, spidervisu
+
+
 #### config
 config = {}
 
 #### TO MODIFY:
 config['dashboard_id_title'] = "tele-test"
 config['n_visu'] = 6
-config['visu_titles'] = ['tele-check', 'tele-spider', 'tele-brake-and-accelerator', 'tele-gear-position', 'tele-speed', 'tele-wheel']
-config['plot_titles'] = ['Torque at transmission', None, 'Accelerator Pedal Position', 'Transmission Gear Position', 'Speed', 'Steering wheel angle']
-config['fields'] = ['torque_at_transmission', None, 'accelerator_pedal_position', 'transmission_gear_position', 'vehicle_speed', 'steering_wheel_angle', 'brake_pedal_status']
-config['scores'] = ['SCORE_torque_at_transmission', None, 'SCORE_accelerator_pedal_position', 'SCORE_transmission_gear_position', 'SCORE_vehicle_speed', 'SCORE_steering_wheel_angle']
+config['visu_titles'] = [
+    'tele-check', 'tele-spider', 'tele-brake-and-accelerator',
+    'tele-gear-position', 'tele-speed', 'tele-wheel'
+]
+config['plot_titles'] = [
+    'Torque at transmission', None, 'Accelerator Pedal Position',
+    'Transmission Gear Position', 'Speed', 'Steering wheel angle'
+]
+config['fields'] = [
+    'torque_at_transmission', None, 'accelerator_pedal_position',
+    'transmission_gear_position', 'vehicle_speed', 'steering_wheel_angle',
+    'brake_pedal_status'
+]
+config['scores'] = [
+    'SCORE_torque_at_transmission', None, 'SCORE_accelerator_pedal_position',
+    'SCORE_transmission_gear_position', 'SCORE_vehicle_speed',
+    'SCORE_steering_wheel_angle'
+]
 
-config['visu_sizes'] = [(7,4),(5,4),(6,3),(6,3),(6,3),(6,3)]
+config['visu_sizes'] = [(7, 4), (5, 4), (6, 3), (6, 3), (6, 3), (6, 3)]
 config['darktheme'] = 'false'
 config['timeTo'] = 'now'
 config['timeFrom'] = 'now-15m'
@@ -50,27 +68,20 @@ config['index'] = 'tele-full'
 config['score_index'] = 'tele-scores'
 
 #### NOT TO MODIFY:
-config['rowcol'] = utils.sizes_to_rowcols(config['visu_sizes'])
+config['rowcol'] = sizes_to_rowcols(config['visu_sizes'])
 
 #### Initialisation
 js = []
-dashboard = utils.dashboard(config)
+dashboard = generate_dashboard(config)
 js.append(dashboard)
 
 for i in range(config['n_visu']):
 # for i in range(1,2):
-	if 'spider' not in config['visu_titles'][i]:
-		js.append(utils.regvisu(config,i))
-	else:
-		js.append(utils.spidervisu(config,i))
+    if 'spider' not in config['visu_titles'][i]:
+        js.append(regvisu(config, i))
+    else:
+        js.append(spidervisu(config, i))
 
 with open('dashboard.json', 'w') as fp:
     json.dump(js, fp, sort_keys=True)
-
-
-
-
-
-
-
 

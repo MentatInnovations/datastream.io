@@ -1,6 +1,3 @@
-import json
-import utils
-
 '''
 README:
 
@@ -31,6 +28,11 @@ etc
 
 where i is the index of an element in the list.
 '''
+import json
+from utils_dashboard import generate_dashboard, sizes_to_rowcols
+from utils_dashboard import regvisu, spidervisu
+
+
 #### config
 config = {}
 
@@ -50,27 +52,19 @@ config['index'] = 'tele-full'
 config['score_index'] = 'tele-scores'
 
 #### NOT TO MODIFY:
-config['rowcol'] = utils.sizes_to_rowcols(config['visu_sizes'])
+config['rowcol'] = sizes_to_rowcols(config['visu_sizes'])
 
 #### Initialisation
 js = []
-dashboard = utils.dashboard(config)
+dashboard = generate_dashboard(config)
 js.append(dashboard)
 
 for i in range(config['n_visu']):
 # for i in range(1,2):
-	if 'spider' not in config['visu_titles'][i]:
-		js.append(utils.regvisu(config,i))
-	else:
-		js.append(utils.spidervisu(config,i))
+    if 'spider' not in config['visu_titles'][i]:
+        js.append(regvisu(config,i))
+    else:
+        js.append(spidervisu(config,i))
 
 with open('dashboard.json', 'w') as fp:
     json.dump(js, fp, sort_keys=True)
-
-
-
-
-
-
-
-
