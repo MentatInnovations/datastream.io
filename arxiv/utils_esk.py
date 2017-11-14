@@ -18,11 +18,14 @@ def batchRedater(X, timefield_name, hz = 10):
     return X
 
 
-def df2es(Y, index_name, es = None, bodyNow = None, recreate = True, chunk_size = 100, raw=False, doc_ids = None):
-    """ """
+def df2es(Y, index_name, es, index_properties=None, recreate=True,
+          chunk_size=100, raw=False, doc_ids=None):
+    """
+    Upload dataframe to Elasticsearch
+    """
     # Creating the mapping
-    if bodyNow is not None:
-        body = {"mappings": {index_name: {"properties": bodyNow}}}
+    if index_properties is not None:
+        body = {"mappings": {index_name: {"properties": index_properties}}}
     print(body)
 
     # Making sure previous indices with similar name are erased and creating a new index
@@ -43,36 +46,35 @@ def df2es(Y, index_name, es = None, bodyNow = None, recreate = True, chunk_size 
 
 
 # X = features
-def DSIO2ES_batchRestreamer(X, timefield_name, es = None, index_name = 'tele_full', reDate = True, everyX = 10, sleep = True):
+def elasticsearch_batch_restreamer(X, timefield_name, es, index_name,
+                                   reDate=True, everyX=10, sleep=True):
+    """
+    Replay input stream into Elasticsearch
+    """
     if reDate:
         X = batchRedater(X, timefield_name)
 
     if not sleep:
         everyX = 200
 
-    virtualTime = np.min(X[timefield_name])
+    virtual_time = np.min(X[timefield_name])
     recreate = True
-    while virtualTime < np.max(X[timefield_name]):
-        startTime = virtualTime
-        virtualTime += everyX*1000
-        endTime = virtualTime
+    while virtual_time < np.max(X[timefield_name]):
+        start_time = virtual_time
+        virtual_time += everyX*1000
+        end_time = virtual_time
         if sleep:
-            while np.round(time.time()) < endTime/1000.:
+            while np.round(time.time()) < end_time/1000.:
                 print('z')
                 time.sleep(1)
 
-        ind = np.logical_and(X[timefield_name] <= endTime, X[timefield_name] > startTime)
+        ind = np.logical_and(X[timefield_name] <= end_time, X[timefield_name] > start_time)
         print('Writing {} rows dated {} to {}'
               .format(np.sum(ind),
-                      datetime.datetime.fromtimestamp(startTime/1000.),
-                      datetime.datetime.fromtimestamp(endTime/1000.)))
+                      datetime.datetime.fromtimestamp(start_time/1000.),
+                      datetime.datetime.fromtimestamp(end_time/1000.)))
 
-        bodyNow = {"time" : {"type": "date"}}
-        df2es(
-            X.loc[ind],
-            index_name,
-            es=es,
-            bodyNow=bodyNow,
-            recreate=recreate
-            )
+        index_properties = {"time" : {"type": "date"}}
+        df2es(X.loc[ind], index_name, es=es,
+              index_properties=index_properties, recreate=recreate)
         recreate = False
