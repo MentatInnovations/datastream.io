@@ -75,8 +75,7 @@ gconf = {
     # Write to Elastic configurations
     'writeToElastic': False,
     'index_name_prefix': "kdd_99_",
-    'index_date_format': "%Y-%m-%d"
-    ,
+    'index_date_format': "%Y-%m-%d",
     'delete_previous_es_data': False,
     'esColumnsTokeep': {
         "DEVICE_ID": "sourceId",
@@ -397,8 +396,7 @@ def rename_time_field(D):
 @timing
 def get_index_name(time):
     return gconf['index_name_prefix'] + time.strftime(gconf[
-                                                          'index_date_format']
-                                                      )
+        'index_date_format'])
 
 
 def to_es_dict(copy_of_df):

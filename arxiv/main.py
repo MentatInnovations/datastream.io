@@ -7,15 +7,15 @@
 
 from __future__ import print_function
 
-import sys
-import datetime
 import argparse
+import sys
+import time
 
-import pandas as pd
+import dateparser
+import elasticsearch as ES
 import numpy as np
 
-import elasticsearch as ES
-
+import pandas as pd
 from utils_esk import elasticsearch_batch_restreamer
 
 
@@ -32,12 +32,21 @@ def main():
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", help="input csv file",
-                        default='../static/data/cardata_sample.csv')
-    parser.add_argument("-o", "--output", help="output elasticsearch uri",
+    parser.add_argument("--es-uri", help="output elasticsearch uri",
                         default="http://localhost:9200/")
+    parser.add_argument("--es-index", help="Elasticsearch index name",
+                        default="dsio")
+    parser.add_argument("--entry-type", help="entry type name",
+                        default="measurement")
     parser.add_argument("-v", "--verbose", help="increase output verbosity",
                         action="store_true")
+    parser.add_argument("-s", '--sensors', help="select specific sensor names",
+                        nargs='+')
+    parser.add_argument("-t", "--timefield", help="name of the column in the data that defines the time",
+                        default="")
+    parser.add_argument("-u", "--timeunit", help="time unit",
+                        default="")
+    parser.add_argument('input', help='input file or stream')
     args = parser.parse_args()
 
     print('Loading the data...')
@@ -46,26 +55,53 @@ def main():
 
     columns = set(dataframe.columns)
 
-    # TODO get timefield_name * time_unit from args or from data
-    timefield_name = 'time'
-    time_unit = 's' # only seconds (s) and milliseconds (ms) supported
-
-    if timefield_name not in columns:
+    # Get timefield & timeunit from args
+    timefield = args.timefield
+    timeunit = args.timeunit
+    if timefield and timefield not in columns:
         print('Missing time column in data, aborting.')
         sys.exit()
 
-    available_sensor_names = columns.copy()
-    available_sensor_names.remove(timefield_name)
+    if not timefield: # try to auto detect timefield
+        for tfname in ['time', 'datetime', 'date', 'timestamp']:
+            if tfname in columns:
+                prev = current = None
+                for i in dataframe[tfname][:10]:
+                    try:
+                        current = dateparser.parse(unicode(i))
+                        # timefield needs to be parsable and always increasing
+                        if not current or (prev and prev > current):
+                            tfname = ''
+                            break
+                    except TypeError:
+                        tfname = ''
+                        break
+                prev = current
+                if tfname:
+                    timefield = tfname
+                    if isinstance(i, float) and not timeunit:
+                        timeunit = 's'
+                    break
 
-    # TODO get selected sensor names from arg
-    sensor_names = set({
-        'accelerator_pedal_position',
-        'torque_at_transmission',
-        'steering_wheel_angle',
-        'brake_pedal_status',
-        'vehicle_speed',
-        'transmission_gear_position'
-    })
+    # If no timefield can be detected treat input as timeseries
+    if not timefield:
+        # Add time dimension with fixed intervals starting from now
+        timefield = 'time'
+        timeunit = 's'
+        start = int(time.time())
+        dataframe[timefield] = pd.Series(
+            range(start, start+dataframe.shape[0]),
+            index=dataframe.index
+        )
+
+    available_sensor_names = set(dataframe.columns).copy()
+    available_sensor_names.remove(timefield)
+
+    # Get selected sensors from args
+    if args.sensors:
+        sensor_names = set(args.sensors)
+    else: # Get all sensors if none selected
+        sensor_names = available_sensor_names
 
     # Check that all sensor names given in config file are in data file
     if sensor_names.issubset(available_sensor_names):
@@ -74,47 +110,46 @@ def main():
         print('Missing sensors, aborting.')
         sys.exit()
 
-    # TODO get index name & type from args or generate from data
-    index_name = 'tele-check'
-    _type = 'car'
+    # Get ES index name and type from args
+    index_name = args.es_index
+    _type = args.entry_type
 
-    print('Done.\n')
-
-    if time_unit is None:
-        print('No time unit given, aborting.')
-        sys.exit()
-    elif time_unit == 's':
-        print('Converting to milliseconds ...')
-        dataframe[timefield_name] = np.floor(dataframe[timefield_name]*1000).astype('int')
-        print('Done')
-
-    min_time = np.min(dataframe[timefield_name])
-    max_time = np.max(dataframe[timefield_name])
+    min_time = dataframe[timefield][0]
+    max_time = dataframe[timefield][dataframe[timefield].size-1]
 
     print('NB: data found from {} to {}'\
-          .format(datetime.datetime.fromtimestamp(min_time/1000.),
-                  datetime.datetime.fromtimestamp(max_time/1000.)))
+          .format(dateparser.parse(unicode(min_time)),
+                  dateparser.parse(unicode(max_time))))
 
-    ### CREATE ALERT STREAMS
-    Dpp = dataframe[[timefield_name] + list(sensor_names)].copy()
+    if timeunit == 's':
+        print('Converting to milliseconds ...')
+        dataframe[timefield] = np.floor(dataframe[timefield]*1000).astype('int')
+        print('Done')
+
+    ### Create alert streams
+    df_scored = dataframe[[timefield] + list(sensor_names)].copy()
 
     for sensor in sensor_names:
-        Dpp['SCORE_{}'.format(sensor)] = batch_score(Dpp[sensor].values)
+        try:
+            df_scored['SCORE_{}'.format(sensor)] = batch_score(df_scored[sensor].values)
+        except TypeError: # Map string values to int category codes
+            values = df_scored[sensor].astype('category').cat.codes
+            df_scored['SCORE_{}'.format(sensor)] = batch_score(values)
 
     ### Adding index name and type for all events:
-    Dpp['_index'] = index_name
-    Dpp['_type'] = _type
+    df_scored['_index'] = index_name
+    df_scored['_type'] = _type
 
-    # TODO generate dashboard with selected fields
+    # TODO generate dashboard with selected fields and scores
     # TODO save dashboard to ES and provide Kibana URL
 
     ### STREAM TO ELASTIC
     # init ElasticSearch
-    # TODO get ES url & auth credentials from args
+    # TODO get ES auth credentials from args
     elasticsearch_batch_restreamer(
-        X=Dpp, timefield_name=timefield_name,
-        es=ES.Elasticsearch(args.output),
-        index_name=index_name, reDate=True, sleep=True
+        X=df_scored, timefield=timefield,
+        es=ES.Elasticsearch(args.es_uri),
+        index_name=index_name, redate=True, sleep=True
     )
 
 
