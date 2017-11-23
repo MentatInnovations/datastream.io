@@ -10,12 +10,16 @@ from __future__ import print_function
 import argparse
 import sys
 import time
+import json
 
 import dateparser
 import elasticsearch as ES
 import numpy as np
-
 import pandas as pd
+
+from kibana_dashboard_api import Visualization, Dashboard
+from kibana_dashboard_api import VisualizationsManager, DashboardsManager
+
 from utils_esk import elasticsearch_batch_restreamer
 
 
@@ -27,6 +31,138 @@ def batch_score(X, q=0.99):
     return scores
 
 
+def detect_time(dataframe, timeunit):
+    """ Attempt to detect the time dimension in a dataframe """
+    columns = set(dataframe.columns)
+    for tfname in ['time', 'datetime', 'date', 'timestamp']:
+        if tfname in columns:
+            prev = current = None
+            for i in dataframe[tfname][:10]:
+                try:
+                    current = dateparser.parse(unicode(i))
+                    # timefield needs to be parsable and always increasing
+                    if not current or (prev and prev > current):
+                        tfname = ''
+                        break
+                except TypeError:
+                    tfname = ''
+                    break
+            prev = current
+            if tfname:
+                timefield = tfname
+                if isinstance(i, float) and not timeunit:
+                    timeunit = 's'
+                break
+
+    return timefield, timeunit
+
+
+def generate_dashboard(es_conn, sensor_names, df_scored, index_name):
+    dashboards = DashboardsManager(es_conn)
+    dashboard = Dashboard()
+    dashboard.id = "%s-dashboard" % index_name
+    dashboard.title = "%s dashboard" % index_name
+    dashboard.panels = []
+    dashboard.options = {"darkTheme": True}
+    dashboard.time_from = "now-15m"
+    dashboard.search_source = {
+        "filter": [{
+            "query": {
+                "query_string": {
+                    "analyze_wildcard": True,
+                    "query":"*"
+                }
+            }
+        }]
+    }
+    visualizations = VisualizationsManager(es_conn)
+    # list all visualizations
+    #vis_list = visualizations.get_all()
+    panels = []
+    i = 0
+    for sensor in sensor_names:
+        vizualization = Visualization()
+        vizualization.id = "%s-%s" % (index_name, sensor)
+        vizualization.title = "%s-%s" % (index_name, sensor)
+        vizualization.search_source = {
+            "index": index_name,
+            "query":{
+                "query_string":{
+                    "analyze_wildcard": True,
+                    "query":"*"
+                }
+            },
+            "filter":[]
+        }
+        vizualization.vis_state = {
+            "title":"%s-%s" % (index_name, sensor),
+            "type":"line",
+            "params":{
+                "addLegend": True,
+                "addTimeMarker": True,
+                "addTooltip": True,
+                "defaultYExtents": True,
+                "drawLinesBetweenPoints": True,
+                "interpolate": "linear",
+                "radiusRatio": 9,
+                "scale": "linear",
+                "setYExtents": False,
+                "shareYAxis": True,
+                "showCircles": True,
+                "smoothLines": True,
+                "times":[],
+                "yAxis":{}
+            },
+            "aggs": [
+                {
+                    "id": "1",
+                    "type": "avg",
+                    "schema":"metric",
+                    "params": {
+                        "field": sensor,
+                        "customLabel": sensor.replace('_', ' ')
+                    }
+                }, {
+                    "id": "2",
+                    "type": "max",
+                    "schema":"radius",
+                    "params":{
+                        "field":"SCORE_%s" % sensor
+                    }
+                }, {
+                    "id": "3",
+                    "type": "date_histogram",
+                    "schema": "segment",
+                    "params":{
+                        "field": "time",
+                        "interval": "custom",
+                        "customInterval": "5s",
+                        "min_doc_count":1,
+                        "extended_bounds":{}
+                    }
+                }
+            ],
+            "listeners": {}
+        }
+
+        viz = visualizations.add(vizualization)
+        panel = {
+            "id": viz["_id"],
+            "panelIndex": i,
+            "row": i,
+            "col": i,
+            "size_x": 7,
+            "size_y": 4,
+            "type": "visualization"
+        }
+        panels.append(panel)
+        ret = dashboard.add_visualization(vizualization)
+        i += 1
+
+    ret = dashboards.add(dashboard)
+    return ret
+
+
 def main():
     """ Main function """
 
@@ -34,15 +170,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--es-uri", help="output elasticsearch uri",
                         default="http://localhost:9200/")
-    parser.add_argument("--es-index", help="Elasticsearch index name",
-                        default="dsio")
+    parser.add_argument("--kibana-uri", help="Kibana uri",
+                        default="http://localhost:5672/")
+    parser.add_argument("--es-index", help="Elasticsearch index name")
     parser.add_argument("--entry-type", help="entry type name",
                         default="measurement")
     parser.add_argument("-v", "--verbose", help="increase output verbosity",
                         action="store_true")
     parser.add_argument("-s", '--sensors', help="select specific sensor names",
                         nargs='+')
-    parser.add_argument("-t", "--timefield", help="name of the column in the data that defines the time",
+    parser.add_argument("-t", "--timefield",
+                        help="name of the column in the data that defines the time",
                         default="")
     parser.add_argument("-u", "--timeunit", help="time unit",
                         default="")
@@ -62,26 +200,8 @@ def main():
         print('Missing time column in data, aborting.')
         sys.exit()
 
-    if not timefield: # try to auto detect timefield
-        for tfname in ['time', 'datetime', 'date', 'timestamp']:
-            if tfname in columns:
-                prev = current = None
-                for i in dataframe[tfname][:10]:
-                    try:
-                        current = dateparser.parse(unicode(i))
-                        # timefield needs to be parsable and always increasing
-                        if not current or (prev and prev > current):
-                            tfname = ''
-                            break
-                    except TypeError:
-                        tfname = ''
-                        break
-                prev = current
-                if tfname:
-                    timefield = tfname
-                    if isinstance(i, float) and not timeunit:
-                        timeunit = 's'
-                    break
+    if not timefield: # Try to auto detect timefield
+        timefield, timeunit = detect_time(dataframe, timeunit)
 
     # If no timefield can be detected treat input as timeseries
     if not timefield:
@@ -110,8 +230,12 @@ def main():
         print('Missing sensors, aborting.')
         sys.exit()
 
-    # Get ES index name and type from args
+    # Get ES index name and type from args or generate from input name
     index_name = args.es_index
+    if not index_name and args.input:
+        index_name = args.input.split('/')[-1].split('.')[0].split('_')[0]
+    if not index_name:
+        index_name = 'dsio'
     _type = args.entry_type
 
     min_time = dataframe[timefield][0]
@@ -140,16 +264,21 @@ def main():
     df_scored['_index'] = index_name
     df_scored['_type'] = _type
 
-    # TODO generate dashboard with selected fields and scores
-    # TODO save dashboard to ES and provide Kibana URL
-
-    ### STREAM TO ELASTIC
     # init ElasticSearch
-    # TODO get ES auth credentials from args
+    es_conn = ES.Elasticsearch(args.es_uri)
+    try:
+        es_conn.info()
+    except ES.ConnectionError:
+        print('Cannot connect to Elasticsearch at %s' % args.es_uri)
+        sys.exit()
+
+    # Generate dashboard with selected fields and scores
+    dashboard = generate_dashboard(es_conn, sensor_names, df_scored, index_name)
+
+    # Steam to Elasticsearch
     elasticsearch_batch_restreamer(
         X=df_scored, timefield=timefield,
-        es=ES.Elasticsearch(args.es_uri),
-        index_name=index_name, redate=True, sleep=True
+        es=es_conn, index_name=index_name, redate=True, sleep=True
     )
 
 
