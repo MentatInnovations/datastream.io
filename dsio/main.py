@@ -5,12 +5,10 @@
 4. restreams input data and scores to ElasticSearch
 """
 
-from __future__ import print_function
-
 import argparse
 import sys
 import time
-import json
+import webbrowser
 
 import dateparser
 import elasticsearch as ES
@@ -20,7 +18,7 @@ import pandas as pd
 from kibana_dashboard_api import Visualization, Dashboard
 from kibana_dashboard_api import VisualizationsManager, DashboardsManager
 
-from utils_esk import elasticsearch_batch_restreamer
+from .restream.elastic import elasticsearch_batch_restreamer
 
 
 def batch_score(X, q=0.99):
@@ -39,7 +37,7 @@ def detect_time(dataframe, timeunit):
             prev = current = None
             for i in dataframe[tfname][:10]:
                 try:
-                    current = dateparser.parse(unicode(i))
+                    current = dateparser.parse(str(i))
                     # timefield needs to be parsable and always increasing
                     if not current or (prev and prev > current):
                         tfname = ''
@@ -81,8 +79,9 @@ def generate_dashboard(es_conn, sensor_names, df_scored, index_name):
     panels = []
     i = 0
     for sensor in sensor_names:
+        viz_id = "%s-%s" % (index_name, sensor)
         vizualization = Visualization()
-        vizualization.id = "%s-%s" % (index_name, sensor)
+        vizualization.id = viz_id
         vizualization.title = "%s-%s" % (index_name, sensor)
         vizualization.search_source = {
             "index": index_name,
@@ -144,10 +143,13 @@ def generate_dashboard(es_conn, sensor_names, df_scored, index_name):
             ],
             "listeners": {}
         }
+        try:
+            viz = visualizations.add(vizualization)
+        except ES.exceptions.ConflictError:
+            pass # Visualization already exists, let's not overwrite it
 
-        viz = visualizations.add(vizualization)
         panel = {
-            "id": viz["_id"],
+            "id": viz_id,
             "panelIndex": i,
             "row": i,
             "col": i,
@@ -159,7 +161,11 @@ def generate_dashboard(es_conn, sensor_names, df_scored, index_name):
         ret = dashboard.add_visualization(vizualization)
         i += 1
 
-    ret = dashboards.add(dashboard)
+    try:
+        ret = dashboards.add(dashboard)
+    except ES.exceptions.ConflictError:
+        pass # Dashboard already exists, let's not overwrite it
+
     return ret
 
 
@@ -171,7 +177,7 @@ def main():
     parser.add_argument("--es-uri", help="output elasticsearch uri",
                         default="http://localhost:9200/")
     parser.add_argument("--kibana-uri", help="Kibana uri",
-                        default="http://localhost:5672/")
+                        default="http://localhost:5601/app/kibana")
     parser.add_argument("--es-index", help="Elasticsearch index name")
     parser.add_argument("--entry-type", help="entry type name",
                         default="measurement")
@@ -242,8 +248,8 @@ def main():
     max_time = dataframe[timefield][dataframe[timefield].size-1]
 
     print('NB: data found from {} to {}'\
-          .format(dateparser.parse(unicode(min_time)),
-                  dateparser.parse(unicode(max_time))))
+          .format(dateparser.parse(str(min_time)),
+                  dateparser.parse(str(max_time))))
 
     if timeunit == 's':
         print('Converting to milliseconds ...')
@@ -274,7 +280,7 @@ def main():
 
     # Generate dashboard with selected fields and scores
     dashboard = generate_dashboard(es_conn, sensor_names, df_scored, index_name)
-
+    webbrowser.open(args.kibana_uri+'#/dashboard/%s-dashboard' % index_name)
     # Steam to Elasticsearch
     elasticsearch_batch_restreamer(
         X=df_scored, timefield=timefield,
