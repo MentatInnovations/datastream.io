@@ -1,0 +1,5 @@
+dateparser
+elasticsearch
+numpy
+scipy
+pandas
