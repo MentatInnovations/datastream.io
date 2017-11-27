@@ -1,17 +1,18 @@
 import pandas as pd
 import numpy as np
 import abc
-
+from dsio.maths import convex_combination
 
 
 class AnomalyDetector(object):
     'common base class for all anomaly detectors'
 
     @abc.abstractmethod
-    def __init__(self, variable_names=None, variable_types=None, theta=None):
+    def __init__(self, variable_names=None, variable_types=None, model_params=None, tuning_params=None):
         self.variable_names = variable_names
         self.variable_types = variable_types
-        self.theta = None
+        self.model_params = model_params
+        self.tuning_params = tuning_params
 
     @abc.abstractmethod
     def update(self, x):
@@ -26,31 +27,41 @@ class AnomalyDetector(object):
     @abc.abstractmethod
     def score(self, x):
         assert (isinstance(x, pd.Series))
+        return
+
+    @abc.abstractmethod
+    def copy(self):
         return
 
 
 class GaussianAnomalyDetector(AnomalyDetector):
 
-    def __init__(self, variable_names=None, variable_types=None, theta=None):
+    def __init__(self,
+                 variable_names=None,
+                 variable_types=None,
+                 model_params={'mu': 0, 'ss': 0},
+                 tuning_params={'ff': 0.9}):
         self.variable_names = variable_names
         self.variable_types = variable_types
-        self.theta = None
+        self.model_params = model_params
+        self.tuning_params = tuning_params
 
     def update(self, x):
         assert(isinstance(x, pd.Series))
-        AnomalyDetector.theta['mu'] = convex_combination(
-            AnomalyDetector.theta['mu'],
+        self.model_params['ss'] = self.tuning_params['ff'] * self.model_params['ss'] + 1
+        self.model_params['mu'] = convex_combination(
+            self.model_params['mu'],
             np.mean(x),
-            weight=1.0/AnomalyDetector.theta['ss']
+            weight=1.0/self.model_params['ss']
         )
 
     def train(self, x):
         assert (isinstance(x, pd.Series))
-        AnomalyDetector.theta = {'mu':np.mean(x), 'ss':len(x)}
+        self.model_params = {'mu': np.mean(x), 'ss': len(x)}
 
     def score(self, x):
         assert (isinstance(x, pd.Series))
-        return np.abs(np.mean(x) - AnomalyDetector.theta['mu'])
+        return np.abs(np.mean(x) - self.model_params['mu'])
 
 print 'Subclass:', issubclass(GaussianAnomalyDetector, AnomalyDetector)
 print 'Instance:', isinstance(GaussianAnomalyDetector(), AnomalyDetector)
@@ -65,4 +76,4 @@ xtest = pd.Series(5)
 ad1 = GaussianAnomalyDetector()
 ad1.train(x)
 ad1.update(xmore)
-ad1.score(xtest)
+print(ad1.score(xtest))
