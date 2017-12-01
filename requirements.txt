@@ -3,4 +3,3 @@ elasticsearch
 numpy
 scipy
 pandas
--e git://github.com/d-mo/kibana-dashboard-api#egg=kibana_dashboard_api

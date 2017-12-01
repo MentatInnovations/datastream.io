@@ -7,7 +7,8 @@ import datetime
 import webbrowser
 
 import numpy as np
-from elasticsearch import helpers
+
+from elasticsearch import helpers, exceptions
 
 from dsio.dashboard.kibana import generate_dashboard
 
@@ -30,7 +31,7 @@ def df2es(Y, index_name, es, index_properties=None, recreate=False,
         try:
             es.indices.delete(index_name)
             print('Deleting existing index {}'.format(index_name))
-        except elasticsearch.exceptions.TransportError:
+        except exceptions.TransportError:
             pass
 
         # Creating the mapping
