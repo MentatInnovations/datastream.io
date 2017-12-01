@@ -4,7 +4,7 @@ from kibana_dashboard_api import Visualization, Dashboard
 from kibana_dashboard_api import VisualizationsManager, DashboardsManager
 
 
-def generate_dashboard(es_conn, sensor_names, df_scored, index_name):
+def generate_dashboard(es_conn, sensor_names, df_scored, index_name, timefield='time'):
     dashboards = DashboardsManager(es_conn)
     dashboard = Dashboard()
     dashboard.id = "%s-dashboard" % index_name
@@ -67,11 +67,30 @@ def generate_dashboard(es_conn, sensor_names, df_scored, index_name):
                 },
                 "aggs": [
                     {
+                        "id": "1",
+                        "type": "avg",
+                        "schema":"metric",
+                        "params": {
+                            "field": sensor,
+                            "customLabel": sensor.replace('_', ' ')
+                        }
+                    }, {
                         "id": "2",
                         "type": "max",
                         "schema":"radius",
                         "params": {
                             "field":"SCORE_%s" % sensor
+                        }
+                    }, {
+                        "id": "3",
+                        "type": "date_histogram",
+                        "schema": "segment",
+                        "params":{
+                            "field": timefield,
+                            "interval": "custom",
+                            "customInterval": "5s",
+                            "min_doc_count": 1,
+                            "extended_bounds": {}
                         }
                     }
                 ],
@@ -96,10 +115,30 @@ def generate_dashboard(es_conn, sensor_names, df_scored, index_name):
         ret = dashboard.add_visualization(viz)
         i += 1
 
+    # Create the index if it does not exist
+    if not es_conn.indices.exists(index_name):
+        index_properties = {"time" : {"type": "date"}}
+        body = {"mappings": {index_name: {"properties": index_properties}}}
+        es_conn.indices.create(index=index_name, body=body)
+
     try:
         ret = dashboards.add(dashboard)
     except elasticsearch.exceptions.ConflictError:
         ret = dashboards.update(dashboard)
         #pass # Dashboard already exists, let's not overwrite it
+
+    es_conn.index(index='.kibana', doc_type="index-pattern", id=index_name,
+                  body={"title": index_name, "timeFieldName": "time"})
+
+    kibana_config = es_conn.search(index='.kibana',
+                                   sort={'_uid': {'order': 'desc'}},
+                                   doc_type='config')
+    try:
+        kibana_id = kibana_config['hits']['hits'][0]['_id']
+    except:
+        raise # TODO
+
+    es_conn.update(index='.kibana', doc_type='config', id=kibana_id,
+                   body={"doc": {"defaultIndex" : index_name}})
 
     return ret

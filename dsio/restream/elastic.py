@@ -1,8 +1,6 @@
 """
 Elasticsearch batch re-streamer
 """
-from __future__ import print_function
-
 import time
 import datetime
 
@@ -11,7 +9,7 @@ import numpy as np
 from elasticsearch import helpers
 
 
-def batchRedater(X, timefield, hz = 10):
+def batchRedater(X, timefield, hz=10):
     # send 10 datapoints a second
     now = np.int(np.round(time.time()))
     X[timefield] = (now*1000 + X.index._data*hz)
@@ -36,13 +34,17 @@ def df2es(Y, index_name, es, index_properties=None, recreate=True,
             print('Deleting existing index {}'.format(index_name))
         except:
             pass
+
         print('Creating index {}'.format(index_name))
-        es.indices.create(index_name, body = body)
+        es.indices.create(index_name, body=body)
 
     # Formatting the batch to upload as a tuple of dictionnaries
     list_tmp = tuple(Y.fillna(0).T.to_dict().values())
+
     # Exporting to ES
     out = helpers.bulk(es, list_tmp)
+
+    return out
 
 
 # X = features
@@ -58,7 +60,7 @@ def elasticsearch_batch_restreamer(X, timefield, es, index_name,
         everyX = 200
 
     virtual_time = np.min(X[timefield])
-    recreate = True
+    recreate = False
     while virtual_time < np.max(X[timefield]):
         start_time = virtual_time
         virtual_time += everyX*1000

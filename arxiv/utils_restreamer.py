@@ -182,7 +182,7 @@ def write_to_rabbit_csv(final_data_frame):
         row = final_data_frame.iloc[num]  # this a dataframe that
         # corresponds to the num line of the big dataframe
         csv_string=final_data_frame[num:(num+1)].to_csv(path_or_buf=None,
-                                                     index=False,
+                                                        index=False,
                                                         header=False)
         # csv_string = StringIO()
         # row.to_csv(csv_string, header=False)
@@ -573,8 +573,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
     validate_conf(gconf)
-    config_dict = read_or_init_restreamed_metadata(
-        METADATA_FILE)
+    config_dict = read_or_init_restreamed_metadata(METADATA_FILE)
     try:
         number_of_executions = gconf['numberOfDaysToReplay']
         for i in range(number_of_executions):
