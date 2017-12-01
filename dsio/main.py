@@ -8,7 +8,6 @@
 import argparse
 import sys
 import time
-import webbrowser
 
 import dateparser
 import elasticsearch
@@ -16,7 +15,6 @@ import numpy as np
 import pandas as pd
 
 from .restream.elastic import elasticsearch_batch_restreamer
-from .dashboard.kibana import generate_dashboard
 from .helpers import detect_time
 
 
@@ -141,19 +139,10 @@ def main():
         print('Cannot connect to Elasticsearch at %s' % args.es_uri)
         sys.exit()
 
-    # Generate dashboard with selected fields and scores
-    dashboard = generate_dashboard(es_conn, sensor_names, df_scored, index_name)
-    if not dashboard:
-        print('Cannot connect to Kibana at %s' % args.kibana_uri)
-        sys.exit()
-
-    # Open Kibana dashboard in browser
-    webbrowser.open(args.kibana_uri+'#/dashboard/%s-dashboard' % index_name)
-
     # Steam to Elasticsearch
     elasticsearch_batch_restreamer(
-        X=df_scored, timefield=timefield,
-        es=es_conn, index_name=index_name, redate=True, sleep=True
+        df_scored, timefield, es_conn, index_name,
+        sensor_names, args.kibana_uri, redate=True, sleep=True
     )
 
 

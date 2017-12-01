@@ -1,12 +1,15 @@
 """
 Elasticsearch batch re-streamer
 """
+import sys
 import time
 import datetime
+import webbrowser
 
 import numpy as np
-
 from elasticsearch import helpers
+
+from dsio.dashboard.kibana import generate_dashboard
 
 
 def batchRedater(X, timefield, hz=10):
@@ -16,24 +19,23 @@ def batchRedater(X, timefield, hz=10):
     return X
 
 
-def df2es(Y, index_name, es, index_properties=None, recreate=True,
+def df2es(Y, index_name, es, index_properties=None, recreate=False,
           chunk_size=100, raw=False, doc_ids=None):
     """
     Upload dataframe to Elasticsearch
     """
-    # Creating the mapping
-    if index_properties is not None:
-        body = {"mappings": {index_name: {"properties": index_properties}}}
-    print(body)
-
     # Making sure previous indices with similar name are erased and creating a new index
     if recreate:
         # init index
         try:
             es.indices.delete(index_name)
             print('Deleting existing index {}'.format(index_name))
-        except:
+        except elasticsearch.exceptions.TransportError:
             pass
+
+        # Creating the mapping
+        if index_properties is not None:
+            body = {"mappings": {index_name: {"properties": index_properties}}}
 
         print('Creating index {}'.format(index_name))
         es.indices.create(index_name, body=body)
@@ -47,36 +49,54 @@ def df2es(Y, index_name, es, index_properties=None, recreate=True,
     return out
 
 
-# X = features
-def elasticsearch_batch_restreamer(X, timefield, es, index_name,
+def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
+                                   sensor_names, kibana_uri,
                                    redate=True, everyX=10, sleep=True):
     """
     Replay input stream into Elasticsearch
     """
     if redate:
-        X = batchRedater(X, timefield)
+        dataframe = batchRedater(dataframe, timefield)
 
     if not sleep:
         everyX = 200
 
-    virtual_time = np.min(X[timefield])
-    recreate = False
-    while virtual_time < np.max(X[timefield]):
+    virtual_time = np.min(dataframe[timefield])
+    first_pass = True
+    while virtual_time < np.max(dataframe[timefield]):
         start_time = virtual_time
         virtual_time += everyX*1000
         end_time = virtual_time
-        if sleep:
+        if sleep and not first_pass:
             while np.round(time.time()) < end_time/1000.:
                 print('z')
                 time.sleep(1)
 
-        ind = np.logical_and(X[timefield] <= end_time, X[timefield] > start_time)
+        ind = np.logical_and(dataframe[timefield] <= end_time,
+                             dataframe[timefield] > start_time)
         print('Writing {} rows dated {} to {}'
               .format(np.sum(ind),
                       datetime.datetime.fromtimestamp(start_time/1000.),
                       datetime.datetime.fromtimestamp(end_time/1000.)))
 
         index_properties = {"time" : {"type": "date"}}
-        df2es(X.loc[ind], index_name, es=es,
-              index_properties=index_properties, recreate=recreate)
-        recreate = False
+        df2es(dataframe.loc[ind], index_name, es_conn, index_properties,
+              recreate=first_pass)
+        if first_pass:
+            es_conn.index(index='.kibana', doc_type="index-pattern",
+                          id=index_name,
+                          body={
+                              "title": index_name,
+                              "timeFieldName": "time"
+                          })
+
+            # Generate dashboard with selected fields and scores
+            dashboard = generate_dashboard(es_conn, sensor_names, index_name)
+            if not dashboard:
+                print('Cannot connect to Kibana at %s' % kibana_uri)
+                sys.exit()
+
+            # Open Kibana dashboard in browser
+            webbrowser.open(kibana_uri+'#/dashboard/%s-dashboard' % index_name)
+
+            first_pass = False

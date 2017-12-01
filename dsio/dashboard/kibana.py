@@ -4,7 +4,7 @@ from kibana_dashboard_api import Visualization, Dashboard
 from kibana_dashboard_api import VisualizationsManager, DashboardsManager
 
 
-def generate_dashboard(es_conn, sensor_names, df_scored, index_name, timefield='time'):
+def generate_dashboard(es_conn, sensor_names, index_name, timefield='time'):
     dashboards = DashboardsManager(es_conn)
     dashboard = Dashboard()
     dashboard.id = "%s-dashboard" % index_name
