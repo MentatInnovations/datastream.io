@@ -47,8 +47,6 @@ def main():
     parser.add_argument("-t", "--timefield",
                         help="name of the column in the data that defines the time",
                         default="")
-    parser.add_argument("-u", "--timeunit", help="time unit",
-                        default="")
     parser.add_argument('input', help='input file or stream')
     args = parser.parse_args()
 
@@ -57,30 +55,37 @@ def main():
     print('Done.\n')
 
     columns = set(dataframe.columns)
+    available_sensor_names = columns.copy()
 
-    # Get timefield & timeunit from args
+    # Get timefield from args
     timefield = args.timefield
-    timeunit = args.timeunit
     if timefield and timefield not in columns:
         print('Missing time column in data, aborting.')
         sys.exit()
 
     if not timefield: # Try to auto detect timefield
-        timefield, timeunit = detect_time(dataframe, timeunit)
+        timefield, unix = detect_time(dataframe)
 
     # If no timefield can be detected treat input as timeseries
     if not timefield:
         # Add time dimension with fixed intervals starting from now
         timefield = 'time'
-        timeunit = 's'
+        unix = True
         start = int(time.time())
         dataframe[timefield] = pd.Series(
             range(start, start+dataframe.shape[0]),
             index=dataframe.index
         )
+    else:
+        available_sensor_names.remove(timefield)
 
-    available_sensor_names = set(dataframe.columns).copy()
-    available_sensor_names.remove(timefield)
+    if not unix:
+        dataframe['time'] = pd.to_datetime(
+            dataframe[timefield],
+            infer_datetime_format=True
+        ).values.astype(np.int64) // 10 ** 9
+        timefield = 'time'
+        unix = True
 
     # Get selected sensors from args
     if args.sensors:
@@ -102,7 +107,7 @@ def main():
           .format(dateparser.parse(str(min_time)),
                   dateparser.parse(str(max_time))))
 
-    if timeunit == 's':
+    if unix:
         print('Converting to milliseconds ...')
         dataframe[timefield] = np.floor(dataframe[timefield]*1000).astype('int')
         print('Done')
@@ -138,7 +143,13 @@ def main():
 
     # Generate dashboard with selected fields and scores
     dashboard = generate_dashboard(es_conn, sensor_names, df_scored, index_name)
+    if not dashboard:
+        print('Cannot connect to Kibana at %s' % args.kibana_uri)
+        sys.exit()
+
+    # Open Kibana dashboard in browser
     webbrowser.open(args.kibana_uri+'#/dashboard/%s-dashboard' % index_name)
+
     # Steam to Elasticsearch
     elasticsearch_batch_restreamer(
         X=df_scored, timefield=timefield,
