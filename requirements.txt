@@ -3,3 +3,4 @@ elasticsearch
 numpy
 scipy
 pandas
+kibana-dashboard-api
