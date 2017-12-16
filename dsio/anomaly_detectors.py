@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import abc
-from dsio.maths import convex_combination
+from dsio.convex_updates import *
 
 
 class AnomalyDetector(object):
@@ -14,7 +14,7 @@ class AnomalyDetector(object):
         self.tuning_params = tuning_params
 
     @abc.abstractmethod
-    def update(self, x):
+    def update(self, x, weight):
         raise NotImplementedError
         return
 
@@ -33,12 +33,21 @@ class AnomalyDetector(object):
         raise NotImplementedError
         return
 
+    @abc.abstractmethod
+    def serialise(self):
+        raise NotImplementedError
+        return
+
+
+
+
+
 
 class Gaussian1D(AnomalyDetector):
 
     def __init__(self,
                  variable_types=[np.dtype('float64')], # TODO: we must find a way to validate incoming dtypes
-                 model_params={'mu': 0, 'ss': 0},
+                 model_params={'mu': 0, 'ess': 0},
                  tuning_params={'ff': 0.9}):
         self.variable_types = variable_types
         self.model_params = model_params
@@ -46,26 +55,47 @@ class Gaussian1D(AnomalyDetector):
 
     def update(self, x): # allows mini-batch
         assert(isinstance(x, pd.Series))
-        self.model_params['ss'] = self.tuning_params['ff'] * self.model_params['ss'] + len(x)
+        self.model_params['ss'], weight = update_effective_sample_size(self.model_params['ess'])
+        self.tuning_params['ff'] * self.model_params['ss'] + len(x)
         self.model_params['mu'] = convex_combination(
             self.model_params['mu'],
             np.mean(x),
-            weight=1.0/self.model_params['ss']
+            weight=1-(self.model_params['ss']-len(x))/self.model_params['ss']
         )
 
     def train(self, x):
         assert (isinstance(x, pd.Series))
+        assert ([x.dtypes] == self.variable_types)
         self.model_params = {'mu': np.mean(x), 'ss': len(x)}
 
     def score(self, x):
         assert (isinstance(x, pd.Series))
-        return np.abs(np.mean(x) - self.model_params['mu'])
+        return np.abs(x - self.model_params['mu'])
 
 #print 'Subclass:', issubclass(UnidimGaussianAD, AnomalyDetector)
 #print 'Instance:', isinstance(UnidimGaussianAD(), AnomalyDetector)
 
 
+class Quantile1D(AnomalyDetector):
 
+    def __init__(self,
+                 variable_types=[np.dtype('float64')], # TODO: we must find a way to validate incoming dtypes
+                 model_params={'sample': [0]},
+                 tuning_params={'ff': 1.0} # TODO: not supported yet on quantiles
+                 ):
+        self.variable_types = variable_types
+        self.model_params = model_params
+        self.tuning_params = tuning_params
 
+    def update(self, x): # allows mini-batch
+        assert(isinstance(x, pd.Series))
+        self.model_params['sample'] = np.concatenate((self.model_params['sample'], x))
 
+    def train(self, x):
+        assert (isinstance(x, pd.Series))
+        assert ([x.dtypes] == self.variable_types)
+        self.model_params['sample'] = x
 
+    def score(self, x):
+        assert (isinstance(x, pd.Series))
+        return np.mean(self.model_params['sample']) - x
