@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import abc
+from scipy.stats import percentileofscore
 from dsio.convex_updates import *
 
 
@@ -98,4 +99,6 @@ class Quantile1D(AnomalyDetector):
 
     def score(self, x):
         assert (isinstance(x, pd.Series))
-        return np.mean(self.model_params['sample']) - x
+        scores = [0.01*percentileofscore(self.model_params['sample'], z) for z in x]
+        return scores
+
