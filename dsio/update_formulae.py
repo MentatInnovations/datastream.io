@@ -41,3 +41,20 @@ def update_effective_sample_size(effective_sample_size, batch_size, forgetting_f
     return updated_sample_size, weight
 
 
+def rolling_window_update(old, new, w=100):
+    """
+
+    :param old: Old data
+    :param new: New data
+    :param w: Controls the size of the rolling window
+    :return: The w most recent datapoints from the concatenation of old and new
+
+    >>> rolling_window_update(old=[1,2,3], new=[4,5,6,7],w=5)
+    array([3,4,5,6,7])
+
+    """
+    out = np.concatenate((old, new))
+    if len(out) > w:
+        out = out[(len(out)-w):]
+    return out
+
