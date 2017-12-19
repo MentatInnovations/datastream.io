@@ -16,14 +16,7 @@ import pandas as pd
 
 from .restream.elastic import elasticsearch_batch_restreamer
 from .helpers import detect_time
-
-
-def batch_score(X, q=0.99):
-    """ Score function """
-    tup = np.percentile(X, q)
-    tdown = np.percentile(X, 1-q)
-    scores = np.logical_or(X < tdown, X > tup)*0.9 + 0.1
-    return scores
+from .anomaly_detectors import AnomalyDetector
 
 
 def main():
@@ -31,6 +24,11 @@ def main():
 
     # Parse arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument("--detector", help="anomaly detector",
+                        default="Quantile1D")
+    parser.add_argument("--modules",
+                        help="python modules that define additional anomaly detectors",
+                        nargs='+', default=[])
     parser.add_argument("--es-uri", help="output elasticsearch uri",
                         default="http://localhost:9200/")
     parser.add_argument("--kibana-uri", help="Kibana uri",
@@ -47,6 +45,24 @@ def main():
                         default="")
     parser.add_argument('input', help='input file or stream')
     args = parser.parse_args()
+
+    for module in args.modules:
+        if module.endswith('.py'):
+            code = open(module).read()
+        else:
+            code = 'import %s' % module
+        try:
+            exec(code)
+        except Exception as exc:
+            print('Failed to load module %s. Exception: %r', (module, exc))
+
+    # Load anomaly detector
+    for Detector in AnomalyDetector.__subclasses__():
+        if Detector.__name__.lower() == args.detector.lower():
+            break
+    else:
+        print('Invalid anomaly detector: %s' % args.detector)
+        sys.exit()
 
     print('Loading the data...')
     dataframe = pd.read_csv(args.input, sep=',')
@@ -98,6 +114,10 @@ def main():
         print('Missing sensors, aborting.')
         sys.exit()
 
+    for sensor in sensor_names.copy():
+        if dataframe[sensor].dtype == np.dtype('O'):
+            sensor_names.remove(sensor)
+
     min_time = dataframe[timefield][0]
     max_time = dataframe[timefield][dataframe[timefield].size-1]
 
@@ -114,11 +134,11 @@ def main():
     df_scored = dataframe[[timefield] + list(sensor_names)].copy()
 
     for sensor in sensor_names:
-        try:
-            df_scored['SCORE_{}'.format(sensor)] = batch_score(df_scored[sensor].values)
-        except TypeError: # Map string values to int category codes
-            values = df_scored[sensor].astype('category').cat.codes
-            df_scored['SCORE_{}'.format(sensor)] = batch_score(values)
+        detector = Detector()
+        values = df_scored[sensor]
+        detector.train(values)
+        detector.update(values)
+        df_scored['SCORE_{}'.format(sensor)] = detector.score(values)
 
     # Get ES index name and type from args or generate from input name
     index_name = args.es_index

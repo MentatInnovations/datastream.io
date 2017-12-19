@@ -13,14 +13,14 @@ from elasticsearch import helpers, exceptions
 from dsio.dashboard.kibana import generate_dashboard
 
 
-def batchRedater(X, timefield, hz=10):
+def batch_redater(dataframe, timefield, hz=10):
     # send 10 datapoints a second
     now = np.int(np.round(time.time()))
-    X[timefield] = (now*1000 + X.index._data*hz)
-    return X
+    dataframe[timefield] = (now*1000 + dataframe.index._data*hz)
+    return dataframe
 
 
-def df2es(Y, index_name, es, index_properties=None, recreate=False,
+def df2es(dataframe, index_name, es, index_properties=None, recreate=False,
           chunk_size=100, raw=False, doc_ids=None):
     """
     Upload dataframe to Elasticsearch
@@ -42,7 +42,7 @@ def df2es(Y, index_name, es, index_properties=None, recreate=False,
         es.indices.create(index_name, body=body)
 
     # Formatting the batch to upload as a tuple of dictionnaries
-    list_tmp = tuple(Y.fillna(0).T.to_dict().values())
+    list_tmp = tuple(dataframe.fillna(0).T.to_dict().values())
 
     # Exporting to ES
     out = helpers.bulk(es, list_tmp)
@@ -57,7 +57,7 @@ def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
     Replay input stream into Elasticsearch
     """
     if redate:
-        dataframe = batchRedater(dataframe, timefield)
+        dataframe = batch_redater(dataframe, timefield)
 
     if not sleep:
         everyX = 200
