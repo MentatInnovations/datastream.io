@@ -4,7 +4,9 @@ from kibana_dashboard_api import Visualization, Dashboard
 from kibana_dashboard_api import VisualizationsManager, DashboardsManager
 
 
-def generate_dashboard(es_conn, sensor_names, index_name, timefield='time'):
+def generate_dashboard(es_conn, sensor_names, index_name, timefield='time',
+                       update=True):
+    """ Generate a Kibana dashboard given a list of sensor names """
     dashboards = DashboardsManager(es_conn)
     dashboard = Dashboard()
     dashboard.id = "%s-dashboard" % index_name
@@ -100,7 +102,8 @@ def generate_dashboard(es_conn, sensor_names, index_name, timefield='time'):
                 res = visualizations.add(viz)
                 assert res['_id'] == viz_id
             except elasticsearch.exceptions.ConflictError:
-                res = visualizations.update(viz)
+                if update:
+                    res = visualizations.update(viz)
 
         panel = {
             "id": viz_id,
@@ -124,19 +127,22 @@ def generate_dashboard(es_conn, sensor_names, index_name, timefield='time'):
     try:
         ret = dashboards.add(dashboard)
     except elasticsearch.exceptions.ConflictError:
-        ret = dashboards.update(dashboard)
-        #pass # Dashboard already exists, let's not overwrite it
+        # Dashboard already exists, let's update it if we have to
+        if update:
+            ret = dashboards.update(dashboard)
 
+    # Create the index pattern
     es_conn.index(index='.kibana', doc_type="index-pattern", id=index_name,
                   body={"title": index_name, "timeFieldName": "time"})
 
+    # Search for kibana config
     kibana_config = es_conn.search(index='.kibana',
                                    sort={'_uid': {'order': 'desc'}},
                                    doc_type='config')
     try:
         kibana_id = kibana_config['hits']['hits'][0]['_id']
     except:
-        raise # TODO
+        raise # Kibana config not found
 
     es_conn.update(index='.kibana', doc_type='config', id=kibana_id,
                    body={"doc": {"defaultIndex" : index_name}})

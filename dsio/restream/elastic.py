@@ -20,8 +20,8 @@ def batch_redater(dataframe, timefield, hz=10):
     return dataframe
 
 
-def df2es(dataframe, index_name, es, index_properties=None, recreate=False,
-          chunk_size=100, raw=False, doc_ids=None):
+def df2es(dataframe, index_name, es_conn, index_properties=None, recreate=False,
+          chunk_size=100):
     """
     Upload dataframe to Elasticsearch
     """
@@ -29,7 +29,7 @@ def df2es(dataframe, index_name, es, index_properties=None, recreate=False,
     if recreate:
         # init index
         try:
-            es.indices.delete(index_name)
+            es_conn.indices.delete(index_name)
             print('Deleting existing index {}'.format(index_name))
         except exceptions.TransportError:
             pass
@@ -39,13 +39,13 @@ def df2es(dataframe, index_name, es, index_properties=None, recreate=False,
             body = {"mappings": {index_name: {"properties": index_properties}}}
 
         print('Creating index {}'.format(index_name))
-        es.indices.create(index_name, body=body)
+        es_conn.indices.create(index_name, body=body)
 
     # Formatting the batch to upload as a tuple of dictionnaries
     list_tmp = tuple(dataframe.fillna(0).T.to_dict().values())
 
     # Exporting to ES
-    out = helpers.bulk(es, list_tmp)
+    out = helpers.bulk(es_conn, list_tmp, chunk_size=chunk_size)
 
     return out
 
