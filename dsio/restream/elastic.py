@@ -13,38 +13,35 @@ from elasticsearch import helpers, exceptions
 from dsio.dashboard.kibana import generate_dashboard
 
 
-def batch_redater(dataframe, timefield, hz=10):
-    # send 10 datapoints a second
+def batch_redater(dataframe, timefield, frequency=10):
+    """ send 10 datapoints a second """
     now = np.int(np.round(time.time()))
-    dataframe[timefield] = (now*1000 + dataframe.index._data*hz)
+    dataframe[timefield] = (now*1000 + dataframe.index._data*frequency)
     return dataframe
 
 
-def df2es(dataframe, index_name, es_conn, index_properties=None, recreate=False,
-          chunk_size=100):
-    """
-    Upload dataframe to Elasticsearch
-    """
-    # Making sure previous indices with similar name are erased and creating a new index
+def upload_dataframe(dataframe, index_name, es_conn, index_properties=None,
+                     recreate=False, chunk_size=100):
+    """ Upload dataframe to Elasticsearch """
+    # Make sure previous indices with similar name are erased and create a new index
     if recreate:
-        # init index
         try:
             es_conn.indices.delete(index_name)
             print('Deleting existing index {}'.format(index_name))
         except exceptions.TransportError:
             pass
 
-        # Creating the mapping
+        # Create the mapping
         if index_properties is not None:
             body = {"mappings": {index_name: {"properties": index_properties}}}
 
         print('Creating index {}'.format(index_name))
         es_conn.indices.create(index_name, body=body)
 
-    # Formatting the batch to upload as a tuple of dictionnaries
+    # Format the batch to upload as a tuple of dictionaries
     list_tmp = tuple(dataframe.fillna(0).T.to_dict().values())
 
-    # Exporting to ES
+    # Export to ES
     out = helpers.bulk(es_conn, list_tmp, chunk_size=chunk_size)
 
     return out
@@ -52,7 +49,7 @@ def df2es(dataframe, index_name, es_conn, index_properties=None, recreate=False,
 
 def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
                                    sensor_names, kibana_uri,
-                                   redate=True, everyX=10, sleep=True):
+                                   redate=True, interval=10, sleep=True):
     """
     Replay input stream into Elasticsearch
     """
@@ -60,13 +57,13 @@ def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
         dataframe = batch_redater(dataframe, timefield)
 
     if not sleep:
-        everyX = 200
+        interval = 200
 
     virtual_time = np.min(dataframe[timefield])
     first_pass = True
     while virtual_time < np.max(dataframe[timefield]):
         start_time = virtual_time
-        virtual_time += everyX*1000
+        virtual_time += interval*1000
         end_time = virtual_time
         if sleep and not first_pass:
             while np.round(time.time()) < end_time/1000.:
@@ -81,8 +78,8 @@ def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
                       datetime.datetime.fromtimestamp(end_time/1000.)))
 
         index_properties = {"time" : {"type": "date"}}
-        df2es(dataframe.loc[ind], index_name, es_conn, index_properties,
-              recreate=first_pass)
+        upload_dataframe(dataframe.loc[ind], index_name, es_conn,
+                         index_properties, recreate=first_pass)
         if first_pass:
             es_conn.index(index='.kibana', doc_type="index-pattern",
                           id=index_name,

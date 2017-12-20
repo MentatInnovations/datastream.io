@@ -29,7 +29,7 @@ Keep in mind that docker-compose commands need to be run in the directory where 
 
 ### Examples
 
-You can use the example csv datasets or to provide your own. If the dataset includes a time dimension dsio will attempt to detect it automatically. Alternatively, you can --timefield argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
+You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can --timefield argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
 
   dsio data/cardata_sample.csv
 

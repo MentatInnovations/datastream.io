@@ -4,7 +4,7 @@ import dateparser
 
 
 def detect_time(dataframe):
-    """ Attempt to detect the time dimension in a dataframe """
+    """ Attempt to detect the time dimension in a dataframe"""
     columns = set(dataframe.columns)
     timefield = unix = None
     for tfname in ['time', 'datetime', 'date', 'timestamp']:
