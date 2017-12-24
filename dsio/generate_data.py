@@ -6,13 +6,18 @@ import numpy as np
 import pandas as pd
 
 
-def gen_data(n=1000, anomalies=10, sigmas=5.0, filename=None):
+def gen_data_with_obvious_anomalies(
+        n=1000,
+        anomalies=10,
+        sigmas=5.0,
+        filename=None
+):
     """
-    :param n: number of total samples, including anomalies
-    :param anomalies: number of anomalies in the sample (should be a small proportion)
-    :param sigmas: this describes how many sigmas away from the mean the anomalies should lie
-    :param filename: if None then the function returns a pandas series, otherwise it writes to the specified file
-    :return:
+    :param n: number of total samples, including anomalies, defaults to 1000
+    :param anomalies: number of anomalies in the sample (should be a small proportion), defaults to 10
+    :param sigmas: this describes how many sigmas away from the mean the anomalies should lie, defaults to 5
+    :param filename: if None (default) then the function returns a pandas object, otherwise it writes to file
+    :return: either None or a pandas data frame
     """
 
     x = np.random.normal(0, 1, n)
@@ -28,4 +33,3 @@ def gen_data(n=1000, anomalies=10, sigmas=5.0, filename=None):
         return x
 
 
-gen_data(n=10,anomalies=2,sigmas=10, filename='tst.csv',)
