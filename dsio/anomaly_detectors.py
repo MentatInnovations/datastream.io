@@ -96,7 +96,7 @@ class Quantile1D(AnomalyDetector):
         )
 
     def train(self, x):
-        #assert isinstance(x, pd.Series)
+        assert isinstance(x, pd.Series)
         assert x.dtypes in self.variable_types
         self.model_params['sample'] = x[:self.tuning_params['w']]
 

@@ -13,7 +13,7 @@ from elasticsearch import helpers, exceptions
 from dsio.dashboard.kibana import generate_dashboard
 
 
-def batch_redater(dataframe, timefield, frequency=10):
+def batch_redater(dataframe, timefield, frequency=1):
     """ send 10 datapoints a second """
     now = np.int(np.round(time.time()))
     dataframe[timefield] = (now*1000 + dataframe.index._data*frequency)
