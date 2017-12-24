@@ -29,11 +29,11 @@ Keep in mind that docker-compose commands need to be run in the directory where 
 
 ### Examples
 
-You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can --timefield argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
+You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can use the --timefield argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
 
     dsio data/cardata_sample.csv
 
-The above command will load the cardata sample csv and will use the default Quantile1D anomaly detector to apply scores for each numeric column. Then it will generate an appropriate Kibana dashboard and will restream the data to Elasticsearch. A browser window should open that will point to the generated Kibana dashboard. Elasticsearch and Kibana are assumed to be running in the default location, http://localhost:9200/ and http://localhost:5601/app/kibana respectively. You can customize these locations using the --es-uri and --kibana-uri arguments.
+The above command will load a sample file containing measurements from an IoT sensor network on a car in CSV format and will use the default Quantile1D anomaly detector to apply scores for each numeric column. Then it will generate an appropriate Kibana dashboard and will restream the data to Elasticsearch. A browser window should open that will point to the generated Kibana dashboard. Elasticsearch and Kibana are assumed to be running in the default location, http://localhost:9200/ and http://localhost:5601/app/kibana respectively. You can customize these locations using the --es-uri and --kibana-uri arguments.
 
 You can experiment with different datasets and anomaly detectors. E.g.
 
