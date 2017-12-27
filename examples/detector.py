@@ -3,9 +3,8 @@ import numpy as np
 from dsio.anomaly_detectors import AnomalyDetector
 
 
-class Percentile(AnomalyDetector):
-    def __init__(self, threshold=0.99):
-        self.threshold = threshold
+class Greater_Than_Max_Rolling(AnomalyDetector):
+    def __init__(self, ):
 
     def detect(self, x):
         score = self.score(x)
