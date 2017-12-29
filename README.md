@@ -29,19 +29,22 @@ Keep in mind that docker-compose commands need to be run in the directory where 
 
 ### Examples
 
-You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can use the --timefield argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
+You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can use the `--timefield` argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
 
     dsio data/cardata_sample.csv
 
-The above command will load a sample file containing measurements from an IoT sensor network on a car in CSV format and will use the default Quantile1D anomaly detector to apply scores for each numeric column. Then it will generate an appropriate Kibana dashboard and will restream the data to Elasticsearch. A browser window should open that will point to the generated Kibana dashboard. Elasticsearch and Kibana are assumed to be running in the default location, http://localhost:9200/ and http://localhost:5601/app/kibana respectively. You can customize these locations using the --es-uri and --kibana-uri arguments.
+The above command will load the cardata sample csv and will use the default Quantile1D anomaly detector to apply scores on every numeric column. Then it will generate an appropriate Kibana dashboard and will restream the data to Elasticsearch. A browser window should open that will point to the generated Kibana dashboard. Elasticsearch and Kibana are assumed to be running in the default location, http://localhost:9200/ and http://localhost:5601/app/kibana respectively. You can customize these locations using the `--es-uri` and `--kibana-uri` arguments.
 
 You can experiment with different datasets and anomaly detectors. E.g.
 
     dsio --detector gaussian1d data/kddup_sample.csv
 
+You can select specific columns using the --sensors argument.
+
+    dsio --sensors accelerator_pedal_position engine_speed --detector gaussian1d data/cardata_sample.csv
+
 ### Defining your own anomaly detectors
 
-You can use dsio with your own hand coded anomaly detectors. These should inherit from the AnomalyDetector abstract base class and implement at least the train, update & score methods. You can find an example 99th percentile anomaly detector in the examples dir. Load the python modules that contain your detectors using the --modules argument and select the target detector by providing its class name to the --detector argument (case insensitive).
+You can use dsio with your own hand coded anomaly detectors. These should inherit from the AnomalyDetector abstract base class and implement at least the train, update & score methods. You can find an example 99th percentile anomaly detector in the examples dir. Load the python modules that contain your detectors using the `--modules` argument and select the target detector by providing its class name to the `--detector` argument (case insensitive).
 
-    dsio  --modules detector.py --detector percentile data/cardata_sample.csv 
-
+    dsio  --modules detector.py --detector percentile data/cardata_sample.csv

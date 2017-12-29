@@ -1,19 +1,40 @@
 """
 Elasticsearch batch re-streamer
 """
-import sys
 import time
 import datetime
-import webbrowser
 
 import numpy as np
 
-from elasticsearch import helpers, exceptions
+import elasticsearch
 
-from dsio.dashboard.kibana import generate_dashboard
+from elasticsearch.helpers import bulk
+
+from ..exceptions import ElasticsearchConnectionError
 
 
-def batch_redater(dataframe, timefield, frequency=1):
+def init_elasticsearch(uri, index_name, entry_type, input, dataframe):
+    # Get ES index name and type from args or generate from input name
+    if not index_name and input:
+        index_name = input.split('/')[-1].split('.')[0].split('_')[0]
+    if not index_name:
+        index_name = 'dsio'
+
+    ### Adding index name and type for all events:
+    dataframe['_index'] = index_name
+    dataframe['_type'] = entry_type
+
+    # init ElasticSearch
+    es_conn = elasticsearch.Elasticsearch(uri)
+    try:
+        es_conn.info()
+    except elasticsearch.ConnectionError:
+        raise ElasticsearchConnectionError(uri)
+
+    return es_conn, index_name, dataframe
+
+
+def batch_redater(dataframe, timefield, frequency=10):
     """ send 10 datapoints a second """
     now = np.int(np.round(time.time()))
     dataframe[timefield] = (now*1000 + dataframe.index._data*frequency)
@@ -28,7 +49,7 @@ def upload_dataframe(dataframe, index_name, es_conn, index_properties=None,
         try:
             es_conn.indices.delete(index_name)
             print('Deleting existing index {}'.format(index_name))
-        except exceptions.TransportError:
+        except elasticsearch.TransportError:
             pass
 
         # Create the mapping
@@ -42,14 +63,14 @@ def upload_dataframe(dataframe, index_name, es_conn, index_properties=None,
     list_tmp = tuple(dataframe.fillna(0).T.to_dict().values())
 
     # Export to ES
-    out = helpers.bulk(es_conn, list_tmp, chunk_size=chunk_size)
+    out = bulk(es_conn, list_tmp, chunk_size=chunk_size)
 
     return out
 
 
 def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
-                                   sensor_names, kibana_uri,
-                                   redate=True, interval=10, sleep=True):
+                                   redate=True, interval=10,
+                                   sleep=True, first_pass=True):
     """
     Replay input stream into Elasticsearch
     """
@@ -60,7 +81,6 @@ def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
         interval = 200
 
     virtual_time = np.min(dataframe[timefield])
-    first_pass = True
     while virtual_time < np.max(dataframe[timefield]):
         start_time = virtual_time
         virtual_time += interval*1000
@@ -80,21 +100,4 @@ def elasticsearch_batch_restreamer(dataframe, timefield, es_conn, index_name,
         index_properties = {"time" : {"type": "date"}}
         upload_dataframe(dataframe.loc[ind], index_name, es_conn,
                          index_properties, recreate=first_pass)
-        if first_pass:
-            es_conn.index(index='.kibana', doc_type="index-pattern",
-                          id=index_name,
-                          body={
-                              "title": index_name,
-                              "timeFieldName": "time"
-                          })
-
-            # Generate dashboard with selected fields and scores
-            dashboard = generate_dashboard(es_conn, sensor_names, index_name)
-            if not dashboard:
-                print('Cannot connect to Kibana at %s' % kibana_uri)
-                sys.exit()
-
-            # Open Kibana dashboard in browser
-            webbrowser.open(kibana_uri+'#/dashboard/%s-dashboard' % index_name)
-
-            first_pass = False
+        first_pass = False

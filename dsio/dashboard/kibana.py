@@ -3,10 +3,20 @@ import elasticsearch
 from kibana_dashboard_api import Visualization, Dashboard
 from kibana_dashboard_api import VisualizationsManager, DashboardsManager
 
+from ..exceptions import KibanaConfigNotFoundError
+
 
 def generate_dashboard(es_conn, sensor_names, index_name, timefield='time',
                        update=True):
     """ Generate a Kibana dashboard given a list of sensor names """
+
+    es_conn.index(index='.kibana', doc_type="index-pattern",
+                    id=index_name,
+                    body={
+                        "title": index_name,
+                        "timeFieldName": "time"
+                    })
+
     dashboards = DashboardsManager(es_conn)
     dashboard = Dashboard()
     dashboard.id = "%s-dashboard" % index_name
@@ -142,7 +152,7 @@ def generate_dashboard(es_conn, sensor_names, index_name, timefield='time',
     try:
         kibana_id = kibana_config['hits']['hits'][0]['_id']
     except:
-        raise # Kibana config not found
+        raise KibanaConfigNotFoundError()
 
     es_conn.update(index='.kibana', doc_type='config', id=kibana_id,
                    body={"doc": {"defaultIndex" : index_name}})
