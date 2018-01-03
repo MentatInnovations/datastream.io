@@ -1,3 +1,4 @@
+bokeh
 dateparser
 elasticsearch
 numpy

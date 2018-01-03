@@ -9,22 +9,27 @@ import numpy as np
 import pandas as pd
 
 from .exceptions import SensorsNotFoundError, TimefieldNotFoundError
+from .exceptions import ModuleLoadError, DetectorNotFoundError
+from .anomaly_detectors import AnomalyDetector
 
 
 def parse_arguments():
     """ Parse command line arguments """
     parser = argparse.ArgumentParser()
     parser.add_argument("--detector", help="Anomaly detector",
-                        default="Gaussian1D")
+                        default="Quantile1D")
     parser.add_argument("--modules",
-                        help="Python modules that define additional anomaly detectors",
+                        help="Python modules that define additional anomaly "
+                             "detectors",
                         nargs='+', default=[])
+
+    parser.add_argument("--es", help="Stream to Elasticsearch",
+                        action="store_true")
     parser.add_argument("--es-uri", help="Output Elasticsearch URI",
                         default="http://localhost:9200/")
     parser.add_argument("--kibana-uri", help="Kibana URI",
                         default="http://localhost:5601/app/kibana")
-    parser.add_argument("--bokeh-port", help="Bokeh server port",
-                        default="5000")
+    parser.add_argument("--bokeh-port", help="Bokeh server port", default="5001")
     parser.add_argument("--es-index", help="Elasticsearch index name")
     parser.add_argument("--entry-type", help="Entry type name",
                         default="measurement")
@@ -35,6 +40,8 @@ def parse_arguments():
     parser.add_argument("-t", "--timefield",
                         help="name of the column in the data that defines the time",
                         default="")
+    parser.add_argument("--speed", help="Restreamer speed",
+                        default="1.0")
     parser.add_argument('input', help='input file or stream')
     return parser.parse_args()
 
@@ -70,7 +77,7 @@ def detect_time(dataframe):
     return timefield, unix
 
 
-def normalize_timefield(dataframe, timefield):
+def normalize_timefield(dataframe, timefield, speed=5):
     available_sensor_names = set(dataframe.columns)
 
     # Get timefield from args
@@ -113,7 +120,16 @@ def normalize_timefield(dataframe, timefield):
         dataframe[timefield] = np.floor(dataframe[timefield]*1000).astype('int')
         print('Done')
 
-    return timefield, available_sensor_names
+    now = np.int(np.round(time.time()*1000))
+    first_timestamp = dataframe[timefield][0]
+    time_offset = now - first_timestamp
+    print('Adding time offset of %.2f seconds' % float(time_offset/1000.0))
+    print('Setting speed to %sx' % ('%f' % speed).rstrip('0').rstrip('.'))
+    dataframe[timefield] = (now + (dataframe[timefield] -
+                                   first_timestamp)/speed).astype(int)
+    print('Done')
+
+    return dataframe, timefield, available_sensor_names
 
 
 def select_sensors(dataframe, sensors, available_sensor_names, timefield):
@@ -121,7 +137,7 @@ def select_sensors(dataframe, sensors, available_sensor_names, timefield):
     if sensors:
         sensor_names = set(sensors)
     else: # Get all sensors if none selected
-        sensor_names = available_sensor_names
+        sensor_names = set([s for s in available_sensor_names if not s.startswith('Unnamed:')])
 
     # Check that all sensor names given in config file are in data file
     if not sensor_names.issubset(available_sensor_names):
@@ -135,3 +151,33 @@ def select_sensors(dataframe, sensors, available_sensor_names, timefield):
     df_copy = dataframe[[timefield] + list(sensor_names)].copy()
 
     return df_copy, sensor_names
+
+
+def load_detector(name, modules):
+    """ Evaluate modules as Python code and load selecter anomaly detector """
+    # Try to load modules
+    for module in modules:
+        if module.endswith('.py'):
+            code = open(module).read()
+        else:
+            code = 'import %s' % module
+        try:
+            exec(code)
+        except Exception as exc:
+            raise ModuleLoadError('Failed to load module %s. Exception: %r', (module, exc))
+
+    # Load selected anomaly detector
+    for detector in AnomalyDetector.__subclasses__():
+        if detector.__name__.lower() == name.lower():
+            return detector
+
+    raise DetectorNotFoundError("Can't find detector: %s" % name)
+
+
+def init_detector_models(sensors, training_set, detector):
+    """ Initialize anomaly detector models """
+    models = {}
+    for sensor in sensors:
+        models[sensor] = detector()
+        models[sensor].train(training_set[sensor])
+    return models

@@ -1,117 +1,159 @@
 """
-1. reads an input data stream that consists of sensor data
-2. generates a Kibana dashboard to visualize the data stream
-3. applies scores to the incoming sensor data, using different models
-4. restreams input data and scores to ElasticSearch
+1. Reads an input data stream that consists of sensor data
+2. Generates Kibana and/or Bokeh dashboards to visualize the data stream
+3. Applies scores to the incoming sensor data, using selected anomaly detector
+4. Restreams input data and scores to ElasticSearch and/or Bokeh server
 """
 
 import sys
+import datetime
 import time
+import threading
 import math
 import webbrowser
 
-import dateparser
-import elasticsearch
+from queue import Queue
+
 import numpy as np
 import pandas as pd
 
+from bokeh.plotting import curdoc
+
 from .restream.elastic import init_elasticsearch
-from .restream.elastic import elasticsearch_batch_restreamer
+from .restream.elastic import upload_dataframe
 from .dashboard.kibana import generate_dashboard as generate_kibana_dashboard
+from .dashboard.bokeh import generate_dashboard as generate_bokeh_dashboard
 
-from .helpers import detect_time, parse_arguments, normalize_timefield, select_sensors
-from .anomaly_detectors import AnomalyDetector
+from .helpers import parse_arguments, normalize_timefield
+from .helpers import select_sensors, init_detector_models, load_detector
 
-from .exceptions import DsioError, ModuleLoadError, DetectorNotFoundError
-from .exceptions import TimefieldNotFoundError, SensorsNotFoundError
+from .exceptions import DsioError
 
 MAX_BATCH_SIZE = 1000
+doc = curdoc()
 
 
-def load_detector(name, modules):
-    """ Evaluate modules as Python code and load selecter anomaly detector """
-    # Try to load modules
-    for module in modules:
-        if module.endswith('.py'):
-            code = open(module).read()
-        else:
-            code = 'import %s' % module
-        try:
-            exec(code)
-        except Exception as exc:
-            raise ModuleLoadError('Failed to load module %s. Exception: %r', (module, exc))
+def restream_dataframe(dataframe, detector, sensors=None, timefield=None,
+                       speed=1, es_uri=None, kibana_uri=None, index_name='',
+                       entry_type='', bokeh_port=5001, first_pass=True):
+    """
+        Restream selected sensors & anomaly detector scores from an input
+        pandas dataframe to an existing Elasticsearch instance and/or to a
+        built-in Bokeh server.
 
-    # Load selected anomaly detector
-    for detector in AnomalyDetector.__subclasses__():
-        if detector.__name__.lower() == name.lower():
-            return detector
+        Generates respective Kibana & Bokeh dashboard apps to visualize the
+        stream in the browser
+    """
 
-    raise DetectorNotFoundError("Can't find detector: %s" % name)
+    dataframe, timefield, available_sensors = normalize_timefield(
+        dataframe, timefield, speed
+    )
+
+    dataframe, sensors = select_sensors(
+        dataframe, sensors, available_sensors, timefield
+    )
+
+    if es_uri:
+        es_conn = init_elasticsearch(es_uri)
+        # Generate dashboard with selected fields and scores
+        generate_kibana_dashboard(es_conn, sensors, index_name)
+        webbrowser.open(kibana_uri+'#/dashboard/%s-dashboard' % index_name)
+    else:
+        es_conn = None
+
+    # Queue to communicate between restreamer and dashboard threads
+    update_queue = Queue()
+    if bokeh_port:
+        dashboard = generate_bokeh_dashboard(
+            sensors, title=detector.__name__, cols=3,
+            port=bokeh_port, update_queue=update_queue
+        )
+        dashboard_thread = threading.Thread(target=dashboard.io_loop.start, daemon=True)
+        dashboard_thread.start()
+        webbrowser.open('http://localhost:%s' % bokeh_port)
+
+    restream_thread = threading.Thread(
+        target=threaded_restream_dataframe,
+        args=(dataframe, sensors, detector, timefield, es_conn,
+              index_name, entry_type, bokeh_port, update_queue)
+    )
+    restream_thread.start()
 
 
-def init_detector_models(sensors, training_set, detector):
-    models = {}
-    for sensor in sensors:
-        models[sensor] = detector()
-        models[sensor].train(training_set[sensor])
+def threaded_restream_dataframe(dataframe, sensors, detector, timefield,
+                                es_conn, index_name, entry_type, bokeh_port,
+                                update_queue):
+    """ Restream dataframe to bokeh and/or Elasticsearch """
+    # Split data into batches
+    batches = np.array_split(dataframe, math.ceil(dataframe.shape[0]/MAX_BATCH_SIZE))
 
-    return models
+    # Initialize anomaly detector models, train using first batch
+    models = init_detector_models(sensors, batches[0], detector)
+
+    first_pass = True
+    for batch in batches:
+        for sensor in sensors: # Apply the scores
+            batch['SCORE_{}'.format(sensor)] = models[sensor].score(batch[sensor])
+
+        end_time = np.min(batch[timefield])
+        recreate_index = first_pass
+        interval = 3
+        while end_time < np.max(batch[timefield]):
+            start_time = end_time
+            end_time += interval*1000
+            if not recreate_index:
+                while np.round(time.time()) < end_time/1000.:
+                    sys.stdout.write('.')
+                    sys.stdout.flush()
+                    time.sleep(1)
+
+            ind = np.logical_and(batch[timefield] <= end_time,
+                                 batch[timefield] > start_time)
+            print('\nWriting {} rows dated {} to {}'
+                    .format(np.sum(ind),
+                            datetime.datetime.fromtimestamp(start_time/1000.),
+                            datetime.datetime.fromtimestamp(end_time/1000.)))
+
+            if bokeh_port:
+                update_queue.put(batch.loc[ind])
+
+            if es_conn: # Stream batch to Elasticsearch
+                upload_dataframe(es_conn, batch.loc[ind], index_name, entry_type,
+                                 recreate=recreate_index)
+            recreate_index = False
+
+        if not first_pass:
+            for sensor in sensors: # Update the models
+                models[sensor].update(batch[sensor])
+
+        first_pass = False
 
 
 def main():
     """ Main function """
     args = parse_arguments()
+    first_pass = True
     try:
         detector = load_detector(args.detector, args.modules)
+
+        # Generate index name from input filename
+        index_name = args.input.split('/')[-1].split('.')[0].split('_')[0]
+        if not index_name:
+            index_name = 'dsio'
 
         print('Loading the data...')
         dataframe = pd.read_csv(args.input, sep=',')
         print('Done.\n')
 
-        timefield, available_sensors = normalize_timefield(dataframe,
-                                                           args.timefield)
-        dataframe, sensors = select_sensors(dataframe, args.sensors,
-                                            available_sensors, timefield)
-
-        if args.es_uri:
-            es_conn, index_name, dataframe = init_elasticsearch(
-                args.es_uri, args.es_index, args.entry_type,
-                args.input, dataframe
-            )
-        else:
-            es_conn = index_name = None
-
-        # Split data into batches
-        batches = np.array_split(dataframe, math.ceil(dataframe.shape[0]/MAX_BATCH_SIZE))
-
-        # Initialize anomaly detector models
-        models = init_detector_models(sensors, batches[0], detector)
-
-        if es_conn: # Generate dashboard with selected fields and scores
-            generate_kibana_dashboard(es_conn, sensors, index_name)
-            webbrowser.open(args.kibana_uri+'#/dashboard/%s-dashboard' % index_name)
-
-        first_pass = True
-        for batch in batches:
-            for sensor in sensors: # Apply the scores
-                batch['SCORE_{}'.format(sensor)] = models[sensor].score(batch[sensor])
-
-            if es_conn: # Stream batch to Elasticsearch
-                elasticsearch_batch_restreamer(
-                    batch, timefield, es_conn, index_name,
-                    redate=True, sleep=True, first_pass=first_pass
-                )
-
-            if not first_pass:
-                for sensor in sensors: # Update the models
-                    models[sensor].update(batch[sensor])
-
-            first_pass = False
-
+        restream_dataframe(
+            dataframe, detector, args.timefield, args.sensors,
+            float(args.speed), args.es and args.es_uri, args.kibana_uri,
+            index_name, args.entry_type, int(args.bokeh_port), first_pass
+        )
+        first_pass = False
     except DsioError as exc:
         print(repr(exc))
         sys.exit(exc.code)
-
 
 
 if __name__ == '__main__':
