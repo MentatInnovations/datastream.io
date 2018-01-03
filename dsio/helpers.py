@@ -42,6 +42,8 @@ def parse_arguments():
                         default="")
     parser.add_argument("--speed", help="Restreamer speed",
                         default="1.0")
+    parser.add_argument("--cols", help="Dashboard columns",
+                        default="3")
     parser.add_argument('input', help='input file or stream')
     return parser.parse_args()
 

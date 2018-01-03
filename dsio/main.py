@@ -35,7 +35,7 @@ doc = curdoc()
 
 def restream_dataframe(dataframe, detector, sensors=None, timefield=None,
                        speed=1, es_uri=None, kibana_uri=None, index_name='',
-                       entry_type='', bokeh_port=5001, first_pass=True):
+                       entry_type='', bokeh_port=5001, cols=3, first_pass=True):
     """
         Restream selected sensors & anomaly detector scores from an input
         pandas dataframe to an existing Elasticsearch instance and/or to a
@@ -64,13 +64,10 @@ def restream_dataframe(dataframe, detector, sensors=None, timefield=None,
     # Queue to communicate between restreamer and dashboard threads
     update_queue = Queue()
     if bokeh_port:
-        dashboard = generate_bokeh_dashboard(
-            sensors, title=detector.__name__, cols=3,
+        generate_bokeh_dashboard(
+            sensors, title=detector.__name__, cols=cols,
             port=bokeh_port, update_queue=update_queue
         )
-        dashboard_thread = threading.Thread(target=dashboard.io_loop.start, daemon=True)
-        dashboard_thread.start()
-        webbrowser.open('http://localhost:%s' % bokeh_port)
 
     restream_thread = threading.Thread(
         target=threaded_restream_dataframe,
@@ -148,7 +145,8 @@ def main():
         restream_dataframe(
             dataframe, detector, args.timefield, args.sensors,
             float(args.speed), args.es and args.es_uri, args.kibana_uri,
-            index_name, args.entry_type, int(args.bokeh_port), first_pass
+            index_name, args.entry_type, int(args.bokeh_port), int(args.cols),
+            first_pass
         )
         first_pass = False
     except DsioError as exc:

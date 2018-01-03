@@ -1,12 +1,16 @@
 """ bokeh dashboard integration """
+import threading
+import webbrowser
+
+import tornado.ioloop
 
 from bokeh.server.server import Server
 from bokeh.application import Application
 from bokeh.application.handlers.function import FunctionHandler
 from bokeh.plotting import figure, ColumnDataSource
 from bokeh.layouts import gridplot
-from bokeh.layouts import layout
 from bokeh.models import HoverTool
+from bokeh.io import output_notebook, show
 
 
 def generate_dashboard(sensors, title, cols=3, port=5001, update_queue=None):
@@ -60,7 +64,15 @@ def generate_dashboard(sensors, title, cols=3, port=5001, update_queue=None):
         if update_queue: # Update every second
             doc.add_periodic_callback(update, 1000)
 
-    app = {'/': Application(FunctionHandler(make_document))}
+    app = Application(FunctionHandler(make_document))
 
-    server = Server(app, port=port)
-    return server
+    io_loop = tornado.ioloop.IOLoop.current()
+
+    if io_loop._running: # Assume we're in a Jupyter notebook
+        output_notebook()
+        show(app)
+    else: # Otherwise start the bokeh server in a thread and open browser
+        server = Server({'/': app}, port=port)
+        dashboard_thread = threading.Thread(target=server.io_loop.start, daemon=True)
+        dashboard_thread.start()
+        webbrowser.open('http://localhost:%s' % port)
