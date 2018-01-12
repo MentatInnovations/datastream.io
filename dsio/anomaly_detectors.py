@@ -1,15 +1,11 @@
 """ Base anomaly detector class and collection of built-in detectors """
 
 import abc
-
 import pandas as pd
 import numpy as np
-
 from scipy.stats import percentileofscore
 from scipy.stats import norm
-
 from collections import namedtuple
-
 from dsio.update_formulae import update_effective_sample_size
 from dsio.update_formulae import convex_combination, rolling_window_update, decision_rule
 
