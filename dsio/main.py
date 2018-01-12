@@ -138,7 +138,7 @@ def main():
         values = df_scored[sensor]
         detector.train(values)
         detector.update(values)
-        df_scored['SCORE_{}'.format(sensor)] = detector.score(values)
+        df_scored['SCORE_{}'.format(sensor)] = detector.anomalyScore(values)
 
     # Get ES index name and type from args or generate from input name
     index_name = args.es_index

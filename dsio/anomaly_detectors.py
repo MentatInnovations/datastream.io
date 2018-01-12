@@ -9,6 +9,42 @@ from collections import namedtuple
 from dsio.update_formulae import update_effective_sample_size
 from dsio.update_formulae import convex_combination, rolling_window_update, decision_rule
 
+from sklearn.base import BaseEstimator
+
+
+class AnomalyMixin(object):
+    """Mixin class for all anomaly detectors, compatible with BaseEstimator from scikit-learn."""
+    _estimator_type = "anomaly"
+
+    def fit_score(self, X):
+        """Fits the model on X and scores each datapoint in X.
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_samples, n_features)
+            Input data
+
+        Returns
+        -------
+        y : ndarray, shape (n_samples, )
+            anomaly scores
+        """
+
+        self.fit(X)
+        return self.anomalyScore(X)
+
+    def update(self, x):
+        raise NotImplementedError
+
+    def anomalyFlag(self, x):
+        raise NotImplementedError
+
+    def fit(self, x):
+        raise NotImplementedError
+
+    def anomalyScore(self, x):
+        raise NotImplementedError
+
 
 def compute_confusion_matrix(detector_output, index_anomalies):
 
@@ -21,117 +57,76 @@ def compute_confusion_matrix(detector_output, index_anomalies):
         'FPR': len(false_anomalies)/(1.0*len(detector_output))}
 
 
-class AnomalyDetector(object):
-    """
-    common base class for all anomaly detectors'
-    """
-
-    @abc.abstractmethod
-    def update(self, x):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def detect(self, x):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def train(self, x):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def score(self, x):
-        raise NotImplementedError
-
-    #@abc.abstractmethod
-    #def copy(self):
-    #    raise NotImplementedError
-
-    #@abc.abstractmethod
-    #def serialise(self):
-    #    raise NotImplementedError
-
-
-class Gaussian1D(AnomalyDetector):
+class Gaussian1D(BaseEstimator, AnomalyMixin):
     def __init__(
             self,
-            variable_types={np.dtype('float64'), np.dtype('int64'), np.dtype('int8')},
-            model_params=namedtuple('model_params', 'mu std ess')(0, 1.0, 0),
-            tuning_params=namedtuple('tuning_params', ['ff'])(0.9),
+            ff = 0.9,
             threshold=0.99
     ):
-
-        # TODO: we must find a way to validate incoming dtypes
-        self.variable_types = variable_types
-        self.model_params = model_params
-        self.tuning_params = tuning_params
+        self.ff = ff
         self.threshold = threshold
 
-    def update(self, x): # allows mini-batch
+    def fit(self, x):
         x = pd.Series(x)
-        ess, weight = update_effective_sample_size(
-            effective_sample_size=self.model_params.ess,
+        self.mu_ = np.mean(x)
+        self.std_ = np.std(x, ddof=1)
+        self.ess_ = len(x)
+
+    def update(self, x): # allows mini-batch
+        try:
+            getattr(self, "mu_")
+        except AttributeError:
+            raise RuntimeError("You must fit the detector before updating it")
+        x = pd.Series(x)
+        self.ess_, weight = update_effective_sample_size(
+            effective_sample_size=self.ess_,
             batch_size=len(x),
-            forgetting_factor=self.tuning_params.ff
+            forgetting_factor=self.ff
         )
-        mu = convex_combination(
-            self.model_params.mu,
+        self.mu_ = convex_combination(
+            self.mu_,
             np.mean(x),
             weight=weight
         )
-        std = np.std(x)
-        # update model state at the end
-        self.model_params = namedtuple('model_params', 'mu std ess')(mu, std, ess)
+        self.std_ = np.std(x)
 
-    def train(self, x):
+    def anomalyScore(self, x):
         x = pd.Series(x)
-        assert x.dtypes in self.variable_types
-        mu = np.mean(x)
-        std = np.std(x, ddof=1)
-        ess = len(x)
-        self.model_params = namedtuple('model_params', 'mu std ess')(mu, std, ess)
-
-    def score(self, x):
-        x = pd.Series(x)
-        scaled_x = np.abs(x - self.model_params.mu)/(1.0*self.model_params.std)
+        scaled_x = np.abs(x - self.mu_)/(1.0*self.std_)
         return norm.cdf(scaled_x)
 
-    def detect(self, x):
-        return decision_rule(self.score(x), self.threshold)
+    def anomalyFlag(self, x):
+        return decision_rule(self.anomalyScore(x), self.threshold)
 
 
-class Percentile1D(AnomalyDetector):
+class Percentile1D(BaseEstimator, AnomalyMixin):
 
     def __init__(
             self,
-            variable_types={np.dtype('float64'), np.dtype('int64'), np.dtype('int8')},
-            model_params=namedtuple('model_params', 'sample')([0]),
-            tuning_params=namedtuple('tuning_params', ['ff', 'w'])(1.0, 300.0),
+            ff=1.0,
+            window_size = 300,
             threshold=0.99
     ):
-
-        # TODO: we must find a better way to validate incoming dtypes
-        self.variable_types = variable_types
-        self.model_params = model_params
-        self.tuning_params = tuning_params
+        self.ff = ff
+        self.window_size = window_size
         self.threshold = threshold
+
+    def fit(self, x):
+        x = pd.Series(x)
+        self.sample_ = x[:int(np.floor(self.window_size))]
 
     def update(self, x): # allows mini-batch
         x = pd.Series(x)
         window = rolling_window_update(
-            old=self.model_params.sample, new=x,
-            w=int(np.floor(self.tuning_params.w))
+            old=self.sample_, new=x,
+            w=int(np.floor(self.window_size))
         )
-        self.model_params = namedtuple('model_params', 'sample')(window)
+        self.sample_ = window
 
-    def train(self, x):
+    def anomalyScore(self, x):
         x = pd.Series(x)
-        assert x.dtypes in self.variable_types
-        self.model_params = namedtuple('model_params', ['sample'])(x[:int(np.floor(self.tuning_params.w))])
-
-    def score(self, x):
-        x = pd.Series(x)
-        scores = pd.Series([0.01*percentileofscore(self.model_params.sample, z) for z in x])
+        scores = pd.Series([0.01*percentileofscore(self.sample_, z) for z in x])
         return scores
 
-    def detect(self, x):
-        return decision_rule(self.score(x), self.threshold)
+    def anomalyFlag(self, x):
+        return decision_rule(self.anomalyScore(x), self.threshold)
