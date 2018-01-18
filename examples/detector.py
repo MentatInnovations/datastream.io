@@ -1,11 +1,11 @@
 import numpy as np
+from sklearn.base import BaseEstimator
 
-from dsio.anomaly_detectors import AnomalyDetector
+from dsio.anomaly_detectors import AnomalyMixin
 
 
-class Percentile(AnomalyDetector):
-    def __init__(self, threshold=0.99):
-        self.threshold = threshold
+class Greater_Than_Max_Rolling(BaseEstimator, AnomalyMixin):
+    def __init__(self, ):
 
     def detect(self, x):
         score = self.score(x)

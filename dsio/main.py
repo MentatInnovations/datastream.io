@@ -90,7 +90,7 @@ def threaded_restream_dataframe(dataframe, sensors, detector, timefield,
     first_pass = True
     for batch in batches:
         for sensor in sensors: # Apply the scores
-            batch['SCORE_{}'.format(sensor)] = models[sensor].score(batch[sensor])
+            batch['SCORE_{}'.format(sensor)] = models[sensor].score_anomaly(batch[sensor])
 
         end_time = np.min(batch[timefield])
         recreate_index = first_pass

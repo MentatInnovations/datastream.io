@@ -10,14 +10,14 @@ import pandas as pd
 
 from .exceptions import SensorsNotFoundError, TimefieldNotFoundError
 from .exceptions import ModuleLoadError, DetectorNotFoundError
-from .anomaly_detectors import AnomalyDetector
+from .anomaly_detectors import AnomalyMixin
 
 
 def parse_arguments():
     """ Parse command line arguments """
     parser = argparse.ArgumentParser()
     parser.add_argument("--detector", help="Anomaly detector",
-                        default="Quantile1D")
+                        default="Gaussian1D")
     parser.add_argument("--modules",
                         help="Python modules that define additional anomaly "
                              "detectors",
@@ -169,7 +169,7 @@ def load_detector(name, modules):
             raise ModuleLoadError('Failed to load module %s. Exception: %r', (module, exc))
 
     # Load selected anomaly detector
-    for detector in AnomalyDetector.__subclasses__():
+    for detector in AnomalyMixin.__subclasses__():
         if detector.__name__.lower() == name.lower():
             return detector
 
@@ -181,5 +181,5 @@ def init_detector_models(sensors, training_set, detector):
     models = {}
     for sensor in sensors:
         models[sensor] = detector()
-        models[sensor].train(training_set[sensor])
+        models[sensor].fit(training_set[sensor])
     return models
