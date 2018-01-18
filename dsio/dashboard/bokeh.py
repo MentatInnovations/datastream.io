@@ -22,19 +22,22 @@ def generate_dashboard(sensors, title, cols=3, port=5001, update_queue=None):
         data = {'time': []}
         for sensor in sensors:
             sensor_score = 'SCORE_%s' % sensor
+            sensor_flag = 'FLAG_%s' % sensor
             data[sensor] = []
             data[sensor_score] = []
+            data[sensor_flag] = []
         source = ColumnDataSource(data=data)
 
         # Add figure for each sensor
-        tools = 'pan,wheel_zoom,xbox_select,reset,hover'
+        tools = 'pan,wheel_zoom,xbox_select,reset'
         figures = []
         for sensor in sensors:
             fig = figure(title=sensor, tools=tools, x_axis_type='datetime',
                          plot_width=600, plot_height=300)
             fig.line('time', sensor, source=source)
             sensor_score = 'SCORE_%s' % sensor
-            fig.circle('time', sensor, size=sensor_score, source=source)
+            sensor_flag = 'FLAG_%s' % sensor
+            fig.circle('time', sensor, size=5, source=source, color='red', fill_alpha=sensor_flag, line_alpha=0)
             hover = HoverTool(
                 tooltips=[
                     ("time", "@time{%F %T}"),
