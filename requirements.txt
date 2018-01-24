@@ -1,6 +1,8 @@
+bokeh
 dateparser
 elasticsearch
 numpy
 scipy
 pandas
 kibana-dashboard-api
+scikit-learn

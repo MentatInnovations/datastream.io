@@ -1,107 +1,132 @@
 """ Base anomaly detector class and collection of built-in detectors """
 
 import abc
-
 import pandas as pd
 import numpy as np
-
 from scipy.stats import percentileofscore
-
+from scipy.stats import norm
+from collections import namedtuple
 from dsio.update_formulae import update_effective_sample_size
-from dsio.update_formulae import convex_combination, rolling_window_update
+from dsio.update_formulae import convex_combination, rolling_window_update, decision_rule
+
+from sklearn.base import BaseEstimator
 
 
-class AnomalyDetector(object):
-    'common base class for all anomaly detectors'
+class AnomalyMixin(object):
+    """Mixin class for all anomaly detectors, compatible with BaseEstimator from scikit-learn."""
+    _estimator_type = "anomaly"
 
-    @abc.abstractmethod
-    def __init__(self, variable_types=None, model_params=None, tuning_params=None):
-        self.variable_types = variable_types
-        self.model_params = model_params
-        self.tuning_params = tuning_params
+    def fit_score(self, X):
+        """Fits the model on X and scores each datapoint in X.
 
-    @abc.abstractmethod
+        Parameters
+        ----------
+        X : ndarray, shape (n_samples, n_features)
+            Input data
+
+        Returns
+        -------
+        y : ndarray, shape (n_samples, )
+            anomaly scores
+        """
+
+        self.fit(X)
+        return self.score_anomaly(X)
+
     def update(self, x):
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def train(self, x):
+    def flag_anomaly(self, x):
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def score(self, x):
+    def fit(self, x):
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def copy(self):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def serialise(self):
+    def score_anomaly(self, x):
         raise NotImplementedError
 
 
-class Gaussian1D(AnomalyDetector):
-    def __init__(self,
-                 variable_types=[np.dtype('float64'), np.dtype('int64'), np.dtype('int8')],
-                 model_params={'mu': 0, 'ess': 0},
-                 tuning_params={'ff': 0.9}):
-        # TODO: we must find a way to validate incoming dtypes
-        self.variable_types = variable_types
-        self.model_params = model_params
-        self.tuning_params = tuning_params
+def compute_confusion_matrix(detector_output, index_anomalies):
+
+    index_detected = set(np.where(detector_output)[0])
+    index_true = set(index_anomalies)
+    true_anomalies = index_detected.intersection(index_true)
+    false_anomalies = index_detected.difference(index_true)
+    return {
+        'TPR': len(true_anomalies)/(1.0*len(index_anomalies)),
+        'FPR': len(false_anomalies)/(1.0*len(detector_output))}
+
+
+class Gaussian1D(BaseEstimator, AnomalyMixin):
+    def __init__(
+            self,
+            ff = 0.9,
+            threshold=0.99
+    ):
+        self.ff = ff
+        self.threshold = threshold
+
+    def fit(self, x):
+        x = pd.Series(x)
+        self.mu_ = np.mean(x)
+        self.std_ = np.std(x, ddof=1)
+        self.ess_ = len(x)
 
     def update(self, x): # allows mini-batch
-        assert isinstance(x, pd.Series)
-        self.model_params['ess'], weight = update_effective_sample_size(
-            effective_sample_size=self.model_params['ess'],
+        try:
+            getattr(self, "mu_")
+        except AttributeError:
+            raise RuntimeError("You must fit the detector before updating it")
+        x = pd.Series(x)
+        self.ess_, weight = update_effective_sample_size(
+            effective_sample_size=self.ess_,
             batch_size=len(x),
-            forgetting_factor=self.tuning_params['ff']
+            forgetting_factor=self.ff
         )
-        self.model_params['mu'] = convex_combination(
-            self.model_params['mu'],
+        self.mu_ = convex_combination(
+            self.mu_,
             np.mean(x),
-            weight=1-(self.model_params['ess']-len(x))/self.model_params['ess']
+            weight=weight
         )
+        self.std_ = np.std(x)
 
-    def train(self, x):
-        assert isinstance(x, pd.Series)
-        assert x.dtypes in self.variable_types
-        self.model_params = {'mu': np.mean(x), 'ess': len(x)}
+    def score_anomaly(self, x):
+        x = pd.Series(x)
+        scaled_x = np.abs(x - self.mu_)/(1.0*self.std_)
+        return norm.cdf(scaled_x)
 
-    def score(self, x):
-        assert isinstance(x, pd.Series)
-        return np.abs(x - self.model_params['mu'])
+    def flag_anomaly(self, x):
+        return decision_rule(self.score_anomaly(x), self.threshold)
 
 
-class Quantile1D(AnomalyDetector):
+class Percentile1D(BaseEstimator, AnomalyMixin):
 
-    def __init__(self,
-                 variable_types=[np.dtype('float64'),
-                                 np.dtype('int64'),
-                                 np.dtype('int8')],
-                 model_params={'sample': [0]},
-                 tuning_params={'ff': 1.0, 'w':100} # TODO: not supported yet on quantiles
-                ):
-        # TODO: we must find a way to validate incoming dtypes
-        self.variable_types = variable_types
-        self.model_params = model_params
-        self.tuning_params = tuning_params
+    def __init__(
+            self,
+            ff=1.0,
+            window_size = 300,
+            threshold=0.99
+    ):
+        self.ff = ff
+        self.window_size = window_size
+        self.threshold = threshold
+
+    def fit(self, x):
+        x = pd.Series(x)
+        self.sample_ = x[:int(np.floor(self.window_size))]
 
     def update(self, x): # allows mini-batch
-        assert isinstance(x, pd.Series)
-        self.model_params['sample'] = rolling_window_update(
-            old=self.model_params['sample'], new=x,
-            w=self.tuning_params['w']
+        x = pd.Series(x)
+        window = rolling_window_update(
+            old=self.sample_, new=x,
+            w=int(np.floor(self.window_size))
         )
+        self.sample_ = window
 
-    def train(self, x):
-        assert isinstance(x, pd.Series)
-        assert x.dtypes in self.variable_types
-        self.model_params['sample'] = x[:self.tuning_params['w']]
-
-    def score(self, x):
-        assert isinstance(x, pd.Series)
-        scores = [0.01*percentileofscore(self.model_params['sample'], z) for z in x]
+    def score_anomaly(self, x):
+        x = pd.Series(x)
+        scores = pd.Series([0.01*percentileofscore(self.sample_, z) for z in x])
         return scores
 
+    def flag_anomaly(self, x):
+        return decision_rule(self.score_anomaly(x), self.threshold)

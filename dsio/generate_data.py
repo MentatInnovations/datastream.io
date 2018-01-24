@@ -30,6 +30,6 @@ def gen_data_with_obvious_anomalies(
         pd.DataFrame(data=x, columns=['simulated_data']).to_csv(filename, index=False)
         return None
     else:
-        return x
+        return x, index_of_anomalies
 
 
