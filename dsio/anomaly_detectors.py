@@ -14,6 +14,7 @@ from sklearn.base import BaseEstimator
 
 THRESHOLD = 0.99
 
+
 class AnomalyMixin(object):
     """Mixin class for all anomaly detectors, compatible with BaseEstimator from scikit-learn."""
     _estimator_type = "anomaly"
@@ -67,30 +68,33 @@ class Gaussian1D(BaseEstimator, AnomalyMixin):
     ):
         self.ff = ff
         self.threshold = threshold
+        self.ess_ = 1
+        self.mu_ = 0
+        self.std_ = 1
 
     def fit(self, x):
         x = pd.Series(x)
-        self.mu_ = np.mean(x)
-        self.std_ = np.std(x, ddof=1)
-        self.ess_ = len(x)
+        self.__setattr__('mu_', np.mean(x))
+        self.__setattr__('std_', np.std(x, ddof=1))
+        self.__setattr__('ess_', len(x))
 
-    def update(self, x): # allows mini-batch
+    def update(self, x):  # allows mini-batch
         try:
             getattr(self, "mu_")
         except AttributeError:
             raise RuntimeError("You must fit the detector before updating it")
         x = pd.Series(x)
-        self.ess_, weight = update_effective_sample_size(
+        ess, weight = update_effective_sample_size(
             effective_sample_size=self.ess_,
             batch_size=len(x),
             forgetting_factor=self.ff
         )
-        self.mu_ = convex_combination(
-            self.mu_,
-            np.mean(x),
-            weight=weight
+        self.__setattr__('ess_', ess)
+        self.__setattr__(
+            'mu_',
+            convex_combination(self.mu_, np.mean(x), weight=weight)
         )
-        self.std_ = np.std(x)
+        self.__setattr__('std_', np.std(x))
 
     def score_anomaly(self, x):
         x = pd.Series(x)
@@ -112,10 +116,11 @@ class Percentile1D(BaseEstimator, AnomalyMixin):
         self.ff = ff
         self.window_size = window_size
         self.threshold = threshold
+        self.sample_ = []
 
     def fit(self, x):
         x = pd.Series(x)
-        self.sample_ = x[:int(np.floor(self.window_size))]
+        self.__setattr__('sample_', x[:int(np.floor(self.window_size))])
 
     def update(self, x): # allows mini-batch
         x = pd.Series(x)
@@ -123,7 +128,7 @@ class Percentile1D(BaseEstimator, AnomalyMixin):
             old=self.sample_, new=x,
             w=int(np.floor(self.window_size))
         )
-        self.sample_ = window
+        self.__setattr__('sample_', window)
 
     def score_anomaly(self, x):
         x = pd.Series(x)

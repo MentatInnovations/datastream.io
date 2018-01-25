@@ -19,20 +19,21 @@ class LOFAnomalyDetector(LocalOutlierFactor, AnomalyMixin):
             window_size=1000
     ):
         self.window_size = window_size
+        self.sample_ = []
         super(LOFAnomalyDetector, self).__init__(n_neighbors=n_neighbors)
 
-    def fit(self, x):
+    def fit(self, x, y=None):  # we add None to agree with sklearn conventions
         x = pd.Series(x)
-        self.sample_ = x[:int(np.floor(self.window_size))]
-        super(LOFAnomalyDetector, self).fit(x.values.reshape(-1,1))  # dsio currently only handles 1D data
+        self.__setattr__('sample_ ', x[:int(np.floor(self.window_size))])
+        super(LOFAnomalyDetector, self).fit(x.values.reshape(-1, 1))  # dsio currently only handles 1D data
 
-    def update(self, x): # allows mini-batch
+    def update(self, x): # this simply refits the LOF for now
         x = pd.Series(x)
         window = rolling_window_update(
             old=self.sample_, new=x,
             w=int(np.floor(self.window_size))
         )
-        self.sample_ = window
+        self.__setattr__('sample_', window)
         self.fit(x)
 
     def score_anomaly(self, x):
