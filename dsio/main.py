@@ -147,12 +147,14 @@ def main():
         print('Done.\n')
 
         restream_dataframe(
-            dataframe, detector, args.timefield, args.sensors,
-            float(args.speed), args.es and args.es_uri, args.kibana_uri,
-            index_name, args.entry_type, int(args.bokeh_port), int(args.cols),
-            first_pass
+            dataframe=dataframe, detector=detector,
+            sensors=args.sensors, timefield=args.timefield,
+            speed=int(args.speed), es_uri=args.es and args.es_uri,
+            kibana_uri=args.kibana_uri, index_name=index_name,
+            entry_type=args.entry_type, bokeh_port=int(args.bokeh_port),
+            cols=int(args.cols)
         )
-        first_pass = False
+
     except DsioError as exc:
         print(repr(exc))
         sys.exit(exc.code)
