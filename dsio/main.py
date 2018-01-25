@@ -29,13 +29,14 @@ from .helpers import select_sensors, init_detector_models, load_detector
 
 from .exceptions import DsioError
 
-MAX_BATCH_SIZE = 100
+MAX_BATCH_SIZE = 1000
 doc = curdoc()
 
 
-def restream_dataframe(dataframe, detector, sensors=None, timefield=None,
-                       speed=10, es_uri=None, kibana_uri=None, index_name='',
-                       entry_type='', bokeh_port=5001, cols=3, first_pass=True):
+def restream_dataframe(
+        dataframe, detector, sensors=None, timefield=None,
+        speed=10, es_uri=None, kibana_uri=None, index_name='',
+        entry_type='', bokeh_port=5001, cols=3):
     """
         Restream selected sensors & anomaly detector scores from an input
         pandas dataframe to an existing Elasticsearch instance and/or to a
