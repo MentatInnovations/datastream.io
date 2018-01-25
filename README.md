@@ -12,7 +12,28 @@ The recommended installation method is to use pip within a Python 3.x virtalenv.
 
 You can use dsio through the command line or import it in your Python code. You can visualize your data streams using the built-in Bokeh server or you can restream them to Elasticsearch and visualize them with Kibana. In either case, dsio will generate an appropriate dashboard for your stream. Also, if you invoke dsio through a Jupyter notebook, it will embed the streaming Bokeh dashboard within the same notebook.
 
+
+### Examples
+
+You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can use the `--timefield` argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
+
+    dsio data/cardata_sample.csv
+
+The above command will load the cardata sample csv and will use the default Gaussian1D anomaly detector to apply scores on every numeric column. Then it will generate an appropriate Bokeh dashboard and restream the data. A browser window should open that will point to the generated dashboard. 
+
+You can experiment with different datasets and anomaly detectors. E.g.
+
+    dsio --detector percentile1d data/kddup_sample.csv
+
+You can select specific columns using the `--sensors` argument and you can increase or decrease the streaming speed using the `--speed` argument.
+
+    dsio --sensors accelerator_pedal_position engine_speed --detector gaussian1d --speed 5 data/cardata_sample.csv
+
 ### Elasticsearch & Kibana (optional)
+
+In order to restream to an Elasticsearch instance that you're running locally and generate a Kibana dashboard you can use the `--es-uri` and `--kibana-uri` arguments.
+
+    dsio --es-uri http://localhost:9200/ --kibana-uri http://localhost:5601/app/kibana data/cardata_sample.csv
 
 If you don't have access to Elasticsearch and Kibana 5.x instances, you can easily start them up in your machine using the docker-compose.yaml file within the examples directory. Docker and docker-compose need to be installed for this to work.
 
@@ -28,26 +49,6 @@ Once you're done you can bring them down.
     docker-compose down
 
 Keep in mind that docker-compose commands need to be run in the directory where the docker-compose.yaml file resides (e.g. dsio-env/src/dsio/examples)
-
-### Examples
-
-You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can use the `--timefield` argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
-
-    dsio data/cardata_sample.csv
-
-The above command will load the cardata sample csv and will use the default Gaussian1D anomaly detector to apply scores on every numeric column. Then it will generate an appropriate Bokeh dashboard and restream the data. A browser window should open that will point to the generated dashboard. 
-
-In order to restream to an Elasticsearch instance that you're running locally and generate a Kibana dashboard you can use the `--es-uri` and `--kibana-uri` arguments.
-
-    dsio --es-uri http://localhost:9200/ --kibana-uri http://localhost:5601/app/kibana data/cardata_sample.csv
-
-You can experiment with different datasets and anomaly detectors. E.g.
-
-    dsio --detector percentile1d data/kddup_sample.csv
-
-You can select specific columns using the `--sensors` argument and you can increase or decrease the streaming speed using the `--speed` argument.
-
-    dsio --sensors accelerator_pedal_position engine_speed --detector gaussian1d --speed 5 data/cardata_sample.csv
 
 ### Defining your own anomaly detectors
 

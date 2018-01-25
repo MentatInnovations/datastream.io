@@ -12,6 +12,8 @@ from dsio.update_formulae import convex_combination, rolling_window_update, deci
 from sklearn.base import BaseEstimator
 
 
+THRESHOLD = 0.99
+
 class AnomalyMixin(object):
     """Mixin class for all anomaly detectors, compatible with BaseEstimator from scikit-learn."""
     _estimator_type = "anomaly"
@@ -60,8 +62,8 @@ def compute_confusion_matrix(detector_output, index_anomalies):
 class Gaussian1D(BaseEstimator, AnomalyMixin):
     def __init__(
             self,
-            ff = 0.9,
-            threshold=0.99
+            ff=1.0,
+            threshold=THRESHOLD
     ):
         self.ff = ff
         self.threshold = threshold
@@ -105,7 +107,7 @@ class Percentile1D(BaseEstimator, AnomalyMixin):
             self,
             ff=1.0,
             window_size = 300,
-            threshold=0.99
+            threshold= THRESHOLD
     ):
         self.ff = ff
         self.window_size = window_size

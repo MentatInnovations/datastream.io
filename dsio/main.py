@@ -29,12 +29,12 @@ from .helpers import select_sensors, init_detector_models, load_detector
 
 from .exceptions import DsioError
 
-MAX_BATCH_SIZE = 1000
+MAX_BATCH_SIZE = 100
 doc = curdoc()
 
 
 def restream_dataframe(dataframe, detector, sensors=None, timefield=None,
-                       speed=1, es_uri=None, kibana_uri=None, index_name='',
+                       speed=10, es_uri=None, kibana_uri=None, index_name='',
                        entry_type='', bokeh_port=5001, cols=3, first_pass=True):
     """
         Restream selected sensors & anomaly detector scores from an input
@@ -79,7 +79,7 @@ def restream_dataframe(dataframe, detector, sensors=None, timefield=None,
 
 def threaded_restream_dataframe(dataframe, sensors, detector, timefield,
                                 es_conn, index_name, entry_type, bokeh_port,
-                                update_queue):
+                                update_queue, interval=3, sleep_interval=1):
     """ Restream dataframe to bokeh and/or Elasticsearch """
     # Split data into batches
     batches = np.array_split(dataframe, math.ceil(dataframe.shape[0]/MAX_BATCH_SIZE))
@@ -95,7 +95,7 @@ def threaded_restream_dataframe(dataframe, sensors, detector, timefield,
 
         end_time = np.min(batch[timefield])
         recreate_index = first_pass
-        interval = 3
+
         while end_time < np.max(batch[timefield]):
             start_time = end_time
             end_time += interval*1000
@@ -103,7 +103,7 @@ def threaded_restream_dataframe(dataframe, sensors, detector, timefield,
                 while np.round(time.time()) < end_time/1000.:
                     sys.stdout.write('.')
                     sys.stdout.flush()
-                    time.sleep(1)
+                    time.sleep(sleep_interval)
 
             ind = np.logical_and(batch[timefield] <= end_time,
                                  batch[timefield] > start_time)
@@ -120,10 +120,12 @@ def threaded_restream_dataframe(dataframe, sensors, detector, timefield,
                                  recreate=recreate_index)
             recreate_index = False
 
-        if not first_pass:
-            for sensor in sensors: # Update the models
+        if first_pass:
+            for sensor in sensors:  # Fit the models
+                models[sensor].fit(batch[sensor])
+        else:
+            for sensor in sensors:  # Update the models
                 models[sensor].update(batch[sensor])
-
         first_pass = False
 
 
