@@ -1,6 +1,6 @@
 """
 Base anomaly detector class and collection of built-in detectors
-Based on the sklearn implementation:
+Over-riding parts of the sklearn implementation:
 https://github.com/scikit-learn/scikit-learn/blob/a24c8b464d094d2c468a16ea9f8bf8d42d949f84/sklearn/neighbors/lof.py#L272
 """
 
