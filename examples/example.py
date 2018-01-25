@@ -1,20 +1,37 @@
+import os, sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.curdir)))
+
 from dsio.anomaly_detectors import Gaussian1D, Percentile1D, compute_confusion_matrix
+from dsio.lof_anomaly_detector import LOFEstimator
 from dsio.generate_data import gen_data_with_obvious_anomalies
 
-x, index_anomalies = gen_data_with_obvious_anomalies(n=1000, anomalies=50)
+x, index_anomalies = gen_data_with_obvious_anomalies(n=1000, anomalies=20)
+detectors = [Gaussian1D, Percentile1D, LOFEstimator]
 
-detector1 = Gaussian1D()
-detector1.fit(x[:50])
-detector_output1 = detector1.flag_anomaly(x)
-print(compute_confusion_matrix(detector_output1, index_anomalies))
-detector1.update(x[101:])
-detector_output1 = detector1.flag_anomaly(x)
-print(compute_confusion_matrix(detector_output1, index_anomalies))
+for detector in detectors:
+    d = detector()
+    print('\nRunning Detector:\n\t{}'.format(d))
+    d.fit(x[:50])
 
-detector2 = Percentile1D()
-detector2.fit(x[:50])
-detector_output2 = detector2.flag_anomaly(x)
-print(compute_confusion_matrix(detector_output2, index_anomalies))
-detector2.update(x[101:])
-detector_output2 = detector2.flag_anomaly(x)
-print(compute_confusion_matrix(detector_output2, index_anomalies))
+    print('Scoring anomalies:')
+    print(list(d.score_anomaly(x)[:10]))
+
+    print('Flagging anomalies:')
+    detector_output = d.flag_anomaly(x)
+    print(list(detector_output[:10]))
+
+    print('Confusion Matrix:')
+    print(compute_confusion_matrix(detector_output, index_anomalies))
+
+    print('>> Updating with some more datapoints')
+    d.update(x[101:])
+
+    print('Flagging anomalies:')
+    detector_output = d.flag_anomaly(x)
+    print(list(detector_output[:10]))
+
+    print('Confusion Matrix:')
+    print(compute_confusion_matrix(detector_output, index_anomalies))
+
+    print('-' * 20)
