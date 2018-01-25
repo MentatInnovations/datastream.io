@@ -15,13 +15,23 @@ for detector in detectors:
     d.fit(x[:50])
 
     print('Scoring anomalies:')
-    print(d.score_anomaly(x)[:10])
+    print(list(d.score_anomaly(x)[:10]))
 
     print('Flagging anomalies:')
     detector_output = d.flag_anomaly(x)
-    print(detector_output[:10])
+    print(list(detector_output[:10]))
 
-    print('Confusion Matrxi:')
+    print('Confusion Matrix:')
+    print(compute_confusion_matrix(detector_output, index_anomalies))
+
+    print('>> Updating with some more datapoints')
+    d.update(x[101:])
+
+    print('Flagging anomalies:')
+    detector_output = d.flag_anomaly(x)
+    print(list(detector_output[:10]))
+
+    print('Confusion Matrix:')
     print(compute_confusion_matrix(detector_output, index_anomalies))
 
     print('-' * 20)

@@ -15,6 +15,7 @@ from dsio.anomaly_detectors import AnomalyMixin
 from sklearn.neighbors.base import KNeighborsMixin, NeighborsBase
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils import check_array
+from sklearn.exceptions import NotFittedError
 
 __all__ = ["LOFEstimator"]
 
@@ -22,13 +23,14 @@ __all__ = ["LOFEstimator"]
 class LOFEstimator(NeighborsBase, AnomalyMixin, KNeighborsMixin):
     def __init__(self, n_neighbors=20, algorithm='auto', leaf_size=30,
                  metric='minkowski', p=2, metric_params=None,
-                 contamination=0.1, n_jobs=1):
+                 contamination=0.1, n_jobs=1, window_size=10**6):
         self._init_params(n_neighbors=n_neighbors,
                           algorithm=algorithm,
                           leaf_size=leaf_size, metric=metric, p=p,
                           metric_params=metric_params, n_jobs=n_jobs)
 
         self.contamination = contamination
+        self.window_size = window_size
 
     def fit(self, X):
         """
@@ -55,9 +57,6 @@ class LOFEstimator(NeighborsBase, AnomalyMixin, KNeighborsMixin):
         if len(X.shape) == 1:
             X = X.reshape(-1, 1)
 
-        # @TODO
-        # removed the following line from sklearn implementation
-        # super(LOFEstimator, self).fit(X)
         super(LOFEstimator, self)._fit(X)
 
         n_samples = self._fit_X.shape[0]
@@ -85,20 +84,43 @@ class LOFEstimator(NeighborsBase, AnomalyMixin, KNeighborsMixin):
 
         return self
 
-    # def update(self, x):  # allows mini-batch
-    #     x = pd.Series(x)
-    #     window = rolling_window_update(
-    #         old=self.sample_, new=x,
-    #         w=int(np.floor(self.window_size))
-    #     )
-    #     self.sample_ = window
-    #
+    def update(self, X):  # allows mini-batch
+
+        if X is None:
+            warn('No point in updating without a new X')
+            return self
+
+        if self._fit_method is None:
+            raise NotFittedError("Must fit before update")
+
+        # reshape the array if it only contains one feature but multiple samples
+        # ex. n_samples=100:  (100,)  --> (100,1)
+        if len(X.shape) == 1:
+            X = X.reshape(-1, 1)
+
+        # make sure that the new and the old X have the same number of features
+        assert self._fit_X.shape[1] == X.shape[1]
+        assert isinstance(X, np.ndarray)
+
+        # @TODO check what happens in multi-dimensional data
+        # # convert the input data to the correct format
+        # if type(self._fit_X) != type(X):
+        #     self._fit_X = pd.Series(self._fit_X) if self._fit_X.shape[1] == 1 else pd.DataFrame(self._fit_X)
+        #     X = pd.Series(X) if X.shape[1] == 1 else pd.DataFrame(X)
+
+        # concat the new with the old data and keep only the last 'window-size' elements
+        new_X = np.concatenate([self._fit_X, X])[-self.window_size:]
+
+        # fit the model with the new data
+        self.fit(new_X)
+
+        return self
 
     def score_anomaly(self, X):
         # map results into [0,1]
         # The higher, the more abnormal
         # @TODO not sure if this is needed, depends on the definition of the function
-        # @TODO there should be a numpy function, but none seemed to work as expected
+        # @TODO there should be a numpy function doing the following, but none seemed to work as expected
         scores = -self._decision_function(X)
         return pd.Series(1 + (scores - np.max(scores)) / np.ptp(scores))
 
