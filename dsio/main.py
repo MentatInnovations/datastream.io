@@ -133,7 +133,7 @@ def threaded_restream_dataframe(dataframe, sensors, detector, timefield,
 def main():
     """ Main function """
     args = parse_arguments()
-    first_pass = True
+
     try:
         detector = load_detector(args.detector, args.modules)
 
@@ -149,7 +149,7 @@ def main():
         restream_dataframe(
             dataframe=dataframe, detector=detector,
             sensors=args.sensors, timefield=args.timefield,
-            speed=int(args.speed), es_uri=args.es and args.es_uri,
+            speed=int(float(args.speed)), es_uri=args.es and args.es_uri,
             kibana_uri=args.kibana_uri, index_name=index_name,
             entry_type=args.entry_type, bokeh_port=int(args.bokeh_port),
             cols=int(args.cols)
