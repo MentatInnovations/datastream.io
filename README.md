@@ -15,6 +15,12 @@ You can use dsio through the command line or import it in your Python code. You 
 
 ### Examples
 
+For this section, it is best to run commands from inside the `examples` directory. If you have installed dsio via pip as demonstrated above, you'd need to run the following command: 
+
+    cd dsio-env/src/dsio/examples
+    
+If instead you cloned the github repo then just `cd dsio/examples` will do. 
+
 You can use the example csv datasets or provide your own. If the dataset includes a time dimension, dsio will attempt to detect it automatically. Alternatively, you can use the `--timefield` argument to manually configure the field that designates the time dimension. If no such field exists, dsio will assume the data is a time series starting from now with 1sec intervals between samples.
 
     dsio data/cardata_sample.csv
@@ -35,9 +41,12 @@ In order to restream to an Elasticsearch instance that you're running locally an
 
     dsio --es-uri http://localhost:9200/ --kibana-uri http://localhost:5601/app/kibana data/cardata_sample.csv
 
+If you are using localhost and the default Kibana and ES ports, you can use the shorthand: 
+
+    dsio --es data/cardata_sample.csv
+
 If you don't have access to Elasticsearch and Kibana 5.x instances, you can easily start them up in your machine using the docker-compose.yaml file within the examples directory. Docker and docker-compose need to be installed for this to work.
 
-    cd dsio-env/src/dsio/examples
     docker-compose up -d
 
 Check that Elasticsearch and Kibana are up.
