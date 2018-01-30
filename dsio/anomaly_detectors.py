@@ -7,7 +7,11 @@ from scipy.stats import percentileofscore
 from scipy.stats import norm
 from collections import namedtuple
 from dsio.update_formulae import update_effective_sample_size
-from dsio.update_formulae import convex_combination, rolling_window_update, decision_rule
+from dsio.update_formulae import (
+    convex_combination,
+    rolling_window_update,
+    decision_rule
+)
 
 from sklearn.base import BaseEstimator
 
@@ -16,7 +20,10 @@ THRESHOLD = 0.99
 
 
 class AnomalyMixin(object):
-    """Mixin class for all anomaly detectors, compatible with BaseEstimator from scikit-learn."""
+    """
+    Mixin class for all anomaly detectors,
+    compatible with BaseEstimator from scikit-learn.
+    """
     _estimator_type = "anomaly"
 
     def fit_score(self, X):
@@ -57,14 +64,15 @@ def compute_confusion_matrix(detector_output, index_anomalies):
     false_anomalies = index_detected.difference(index_true)
     return {
         'TPR': len(true_anomalies)/(1.0*len(index_anomalies)),
-        'FPR': len(false_anomalies)/(1.0*len(detector_output))}
+        'FPR': len(false_anomalies)/(1.0*len(detector_output))
+    }
 
 
 class Gaussian1D(BaseEstimator, AnomalyMixin):
     def __init__(
-            self,
-            ff=1.0,
-            threshold=THRESHOLD
+        self,
+        ff=1.0,
+        threshold=THRESHOLD
     ):
         self.ff = ff
         self.threshold = threshold
@@ -108,10 +116,10 @@ class Gaussian1D(BaseEstimator, AnomalyMixin):
 class Percentile1D(BaseEstimator, AnomalyMixin):
 
     def __init__(
-            self,
-            ff=1.0,
-            window_size = 300,
-            threshold= THRESHOLD
+        self,
+        ff=1.0,
+        window_size=300,
+        threshold=THRESHOLD
     ):
         self.ff = ff
         self.window_size = window_size
@@ -122,7 +130,7 @@ class Percentile1D(BaseEstimator, AnomalyMixin):
         x = pd.Series(x)
         self.__setattr__('sample_', x[:int(np.floor(self.window_size))])
 
-    def update(self, x): # allows mini-batch
+    def update(self, x):  # allows mini-batch
         x = pd.Series(x)
         window = rolling_window_update(
             old=self.sample_, new=x,
