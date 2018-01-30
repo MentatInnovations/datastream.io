@@ -1,9 +1,10 @@
-import os, sys
+import os
+import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.curdir)))
 
 from dsio.anomaly_detectors import Gaussian1D, Percentile1D, compute_confusion_matrix
-from dsio.lof_anomaly_detector import LOFEstimator
+from examples.lof_anomaly_detector import LOFEstimator
 from dsio.generate_data import gen_data_with_obvious_anomalies
 
 x, index_anomalies = gen_data_with_obvious_anomalies(n=1000, anomalies=20)

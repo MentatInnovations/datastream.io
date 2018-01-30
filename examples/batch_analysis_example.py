@@ -1,6 +1,6 @@
 from dsio.anomaly_detectors import Gaussian1D, Percentile1D, compute_confusion_matrix
-from dsio.lof_anomaly_detector import LOFAnomalyDetector
 from dsio.generate_data import gen_data_with_obvious_anomalies
+from examples.lof_anomaly_detector import LOFAnomalyDetector
 
 x, index_anomalies = gen_data_with_obvious_anomalies(n=1000, anomalies=50)
 

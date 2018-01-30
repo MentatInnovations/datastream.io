@@ -29,7 +29,7 @@ The above command will load the cardata sample csv and will use the default Gaus
 
 You can experiment with different datasets and anomaly detectors. E.g.
 
-    dsio --detector percentile1d data/kddup_sample.csv
+    dsio --detector percentile1d path_to_my_dataset/my_dataset.csv
 
 You can select specific columns using the `--sensors` argument and you can increase or decrease the streaming speed using the `--speed` argument.
 
