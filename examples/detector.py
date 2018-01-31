@@ -6,6 +6,7 @@ from dsio.anomaly_detectors import AnomalyMixin
 
 class Greater_Than_Max_Rolling(BaseEstimator, AnomalyMixin):
     def __init__(self, ):
+        pass
 
     def detect(self, x):
         score = self.score(x)
