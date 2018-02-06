@@ -12,7 +12,7 @@ It also hosts certain decision formulae.
 import numpy as np
 
 
-def convex_combination(a,b,weight):
+def convex_combination(a, b, weight):
     """
 
     :param a: one summand (e.g., partial sum)
@@ -27,7 +27,11 @@ def convex_combination(a,b,weight):
     return (1-weight) * a + weight * b
 
 
-def update_effective_sample_size(effective_sample_size, batch_size, forgetting_factor):
+def update_effective_sample_size(
+    effective_sample_size,
+    batch_size,
+    forgetting_factor
+):
     """
 
     :param effective_sample_size:
@@ -39,8 +43,13 @@ def update_effective_sample_size(effective_sample_size, batch_size, forgetting_f
     (2.0, 1.0)
 
     """
-    updated_sample_size = effective_sample_size * forgetting_factor + batch_size
-    weight = 1 - (effective_sample_size*1.0 - batch_size)/(effective_sample_size*1.0)
+    updated_sample_size = (
+        effective_sample_size * forgetting_factor + batch_size
+    )
+    weight = 1 - (
+        (effective_sample_size*1.0 - batch_size) /
+        (effective_sample_size*1.0)
+    )
     return updated_sample_size, weight
 
 

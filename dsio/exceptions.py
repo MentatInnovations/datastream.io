@@ -54,9 +54,11 @@ class SensorsNotFoundError(DsioError):
     msg = "Selected sensors not found in data"
     code = 4
 
+
 class ElasticsearchConnectionError(DsioError):
     msg = "Cannot connect to Elasticsearch"
     code = 5
+
 
 class KibanaConfigNotFoundError(DsioError):
     msg = "Kibana config index not found in Elasticsearch"
