@@ -69,3 +69,9 @@ Keep in mind that docker-compose commands need to be run in the directory where 
 You can use dsio with your own hand coded anomaly detectors. These should inherit from the AnomalyDetector abstract base class and implement at least the train, update & score methods. You can find an example 99th percentile anomaly detector in the examples dir. Load the python modules that contain your detectors using the `--modules` argument and select the target detector by providing its class name to the `--detector` argument (case insensitive).
 
     dsio  --modules detector.py --detector GreaterThanMaxRolling data/cardata_sample.csv
+
+### Integration with scikit-learn
+
+Naturally we encourage people to use `dsio` in combination with `sklearn`: we have no wish to reinvent the wheel! However, `sklearn` currently supports regression, classification and clustering interfaces, but not anomaly detection as a standalone category. We are trying to correct that by the introduction of the `AnomalyMixin`: an interface for anomaly detection which follows `sklearn` design patterns. When you import an `sklearn` object you can therefore simply define or override certain methods to make it compatible with `dsio`. We have provided an example for you here:
+
+    ./datamstream.io/examples/lof_anomaly_detector.py
