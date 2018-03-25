@@ -71,7 +71,7 @@ def generate_dashboard(sensors, title, cols=3, port=5001, update_queue=None):
 
     io_loop = tornado.ioloop.IOLoop.current()
 
-    if io_loop._running: # Assume we're in a Jupyter notebook
+    if getattr(io_loop, '_running', False): # Assume we're in a Jupyter notebook
         output_notebook()
         show(app)
     else: # Otherwise start the bokeh server in a thread and open browser
