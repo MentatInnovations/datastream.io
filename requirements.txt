@@ -6,3 +6,4 @@ scipy
 pandas
 kibana-dashboard-api
 scikit-learn
+kafka-python

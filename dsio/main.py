@@ -17,6 +17,9 @@ from queue import Queue
 import numpy as np
 import pandas as pd
 
+from kafka import KafkaConsumer
+import json
+
 from bokeh.plotting import curdoc
 
 from .restream.elastic import init_elasticsearch
@@ -142,18 +145,55 @@ def main():
         if not index_name:
             index_name = 'dsio'
 
-        print('Loading the data...')
-        dataframe = pd.read_csv(args.input, sep=',')
-        print('Done.\n')
+        if args.kafka_uri:
+            print('Kafka input mode...')
+            kafka_window_size = int(args.kafka_window_size)
+            consumer = KafkaConsumer(args.input,
+                         group_id='dsio-group',
+                         bootstrap_servers=args.kafka_uri.split(';'),
+                         #decoding json messages
+                         value_deserializer=lambda m: json.loads(m.decode('ascii')),
+                         auto_offset_reset= args.auto_offset_reset)
+            try:
+                to_analyze = []
+                while True:
+                    received = consumer.poll(timeout_ms=1000)
+                    for topic_partition, messages in received.items():
+                        for m in messages:
+                            print(m.value)
+                            to_analyze.append(m.value)
+                    #waiting to accumlate at least kafka_window_size items to analyze
+                    if len(to_analyze) < kafka_window_size:
+                        pass
+                    else:
+                        print(to_analyze)
+                        dataframe=pd.DataFrame(to_analyze)
+                        restream_dataframe(
+                            dataframe=dataframe, detector=detector,
+                            sensors=args.sensors, timefield=args.timefield,
+                            speed=int(float(args.speed)), es_uri=args.es and args.es_uri,
+                            kibana_uri=args.kibana_uri, index_name=index_name,
+                            entry_type=args.entry_type, bokeh_port=int(args.bokeh_port),
+                            cols=int(args.cols)
+                        )
+            except KeyboardInterrupt:
+                print('Stopping Kafka consumer...')
+            finally:
+                consumer.close()
 
-        restream_dataframe(
-            dataframe=dataframe, detector=detector,
-            sensors=args.sensors, timefield=args.timefield,
-            speed=int(float(args.speed)), es_uri=args.es and args.es_uri,
-            kibana_uri=args.kibana_uri, index_name=index_name,
-            entry_type=args.entry_type, bokeh_port=int(args.bokeh_port),
-            cols=int(args.cols)
-        )
+        else:
+            print('Loading the data from csv...')
+            dataframe = pd.read_csv(args.input, sep=',')
+            print('Done.\n')
+
+            restream_dataframe(
+                dataframe=dataframe, detector=detector,
+                sensors=args.sensors, timefield=args.timefield,
+                speed=int(float(args.speed)), es_uri=args.es and args.es_uri,
+                kibana_uri=args.kibana_uri, index_name=index_name,
+                entry_type=args.entry_type, bokeh_port=int(args.bokeh_port),
+                cols=int(args.cols)
+            )
 
     except DsioError as exc:
         print(repr(exc))

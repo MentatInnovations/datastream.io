@@ -31,6 +31,12 @@ def parse_arguments():
                         default="http://localhost:5601/app/kibana")
     parser.add_argument("--bokeh-port", help="Bokeh server port", default="5001")
     parser.add_argument("--es-index", help="Elasticsearch index name")
+    parser.add_argument("--kafka-uri",help="Kafka broker uri",
+                        default=None)
+    parser.add_argument("--kafka-window-size",help="messages to wait for batch analysis",
+                        default=100)
+    parser.add_argument("--auto_offset_reset",help="kafka offset strategy: earliest or latest",
+                        default="latest")
     parser.add_argument("--entry-type", help="Entry type name",
                         default="measurement")
     parser.add_argument("-v", "--verbose", help="Increase output verbosity",

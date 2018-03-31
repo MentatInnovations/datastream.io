@@ -75,3 +75,6 @@ You can use dsio with your own hand coded anomaly detectors. These should inheri
 Naturally we encourage people to use `dsio` in combination with `sklearn`: we have no wish to reinvent the wheel! However, `sklearn` currently supports regression, classification and clustering interfaces, but not anomaly detection as a standalone category. We are trying to correct that by the introduction of the `AnomalyMixin`: an interface for anomaly detection which follows `sklearn` design patterns. When you import an `sklearn` object you can therefore simply define or override certain methods to make it compatible with `dsio`. We have provided an example for you here:
 
     ./datamstream.io/examples/lof_anomaly_detector.py
+
+### Read data stream from Kafka (optional)
+It is possible to read a stream of data from Kafka adding the parameter `--kafka-uri` with the list of the bootstrap_servers delimited by `;`. The analysis will be done on a window of `--kafka-window-size` items from the input stream. The input parameter will represent input topic. The parameter `--auto_offset_reset` can be set to latest (default) to read only new messages or to earliest to read a topic from the beginning.
